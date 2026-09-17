@@ -8,7 +8,7 @@ Download the Windows ZIP from [Releases](https://github.com/shoui520/easy-japane
 
 ## Requirements
 
-- Windows 11 x64 (Intel or AMD processor).
+- Windows 10 22H2 or Windows 11, x64 (Intel or AMD processor). Windows 10 compatibility is expected but not yet tested.
 - Microsoft Edge WebView2 Runtime.
 - Internet for initial setup and model downloads; downloaded models work offline.
 - A writable app folder and several gigabytes of free disk space for components and models.
