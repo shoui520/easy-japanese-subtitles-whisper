@@ -8,14 +8,21 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+PRIVATE = ROOT / ".runtime"
 DATA = Path(os.environ.get("EASY_SUBS_DATA", str(ROOT / ".app-data"))).resolve()
 
 
 def executable(name, override=""):
-    found = override or shutil.which(name)
+    local = PRIVATE / "ffmpeg" / "ffmpeg-9.0.1-essentials_build" / "bin" / f"{name}.exe"
+    found = override or (str(local) if local.is_file() else shutil.which(name))
     if not found or not Path(found).is_file():
-        raise RuntimeError(f"{name} was not found. Install FFmpeg with WinGet or select its executable in Setup.")
+        raise RuntimeError(f"{name} was not found. The app's media tools are missing; repair the local runtime or select the executable in Setup.")
     return str(Path(found).resolve())
+
+
+def default_python():
+    local = PRIVATE / "venv" / "Scripts" / "python.exe"
+    return str(local) if local.is_file() and (PRIVATE / "ready.json").is_file() else sys.executable
 
 
 def python_candidates():

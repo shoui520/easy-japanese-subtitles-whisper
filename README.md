@@ -16,7 +16,10 @@ PyTorch 2.11.0 CUDA 12.8 and Transformers 4.57.6.
    environment use `./scripts/setup-dev.ps1 -Compute cpu`.
 4. Open **build/launcher/Easy Japanese Subtitles.exe**, or run `.\.venv\Scripts\python.exe -m app.main`.
 
-Python and FFmpeg are not bundled. WebView2 Runtime must be present. Setup does not
+For an app-owned Python/FFmpeg runtime and PowerShell 5.1 clean-PATH verification,
+see [private runtime setup](docs/private-runtime.md). It leaves the developer `.venv` intact.
+
+Python and FFmpeg are downloaded separately by that helper. WebView2 Runtime must be present. Setup does not
 change system Python packages. This is a development milestone, not the final
 automatic first-run bootstrapper or public portable release.
 
@@ -89,7 +92,7 @@ Transformers with their own tokenizer; Turbo uses official OpenAI Whisper.
 FP16 runs on CUDA, XPU, and ROCm/HIP; CPU uses FP32. Intel/AMD routes are implemented
 but are not yet hardware-verified. See [GPU runtime setup](docs/gpu-runtimes.md)
 for supported runtime profiles, separate-environment setup, and testing limits.
-First use downloads model files into the standard local caches; existing cached
+First use downloads model files into `.runtime/models`; existing app-cached
 weights are reused. Source audio/video is never uploaded.
 
 The API binds to `127.0.0.1` and requires a per-launch token. Inference runs in a

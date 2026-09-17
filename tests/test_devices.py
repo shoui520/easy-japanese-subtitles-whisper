@@ -66,7 +66,7 @@ def test_turbo_xpu_leaves_unused_sparse_alignment_buffer_on_cpu(monkeypatch):
         def register_buffer(self, name, value, persistent):
             assert not persistent
             self._buffers[name] = value
-    def load(name, device):
+    def load(name, device, **kwargs):
         assert name == 'turbo' and device == 'cpu'
         return Model()
     monkeypatch.setitem(sys.modules, 'whisper', NS(load_model=load))
@@ -79,7 +79,7 @@ def test_turbo_xpu_leaves_unused_sparse_alignment_buffer_on_cpu(monkeypatch):
 @pytest.mark.parametrize('device', ['cuda', 'cpu'])
 def test_turbo_existing_device_routes_unchanged(monkeypatch, device):
     calls = []
-    def load(name, device):
+    def load(name, device, **kwargs):
         calls.append(device)
         return NS(eval=lambda: 'model')
     monkeypatch.setitem(sys.modules, 'whisper', NS(load_model=load))

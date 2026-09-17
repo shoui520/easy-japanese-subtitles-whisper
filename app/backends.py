@@ -1,5 +1,6 @@
 """Adapters reuse the original prototype's decoding and tokenizer validation."""
 from anime_subs import HF_MODEL_IDS, load_hf_model, transcribe, transcribe_turbo
+from app.runtime import PRIVATE
 
 MODELS = {
     "anime": {"name": "Japanese Anime", "description": "efwkjn/whisper-ja-anime-v0.3"},
@@ -27,18 +28,19 @@ class WhisperBackend:
                     # Whisper's sparse alignment-head buffer is only used for word
                     # alignment (disabled here). Keep it on CPU: XPU sparse support
                     # must not be required for ordinary segment timestamps.
-                    self.model = whisper.load_model("turbo", device="cpu").eval()
+                    self.model = whisper.load_model("turbo", device="cpu", download_root=str(PRIVATE / "models" / "whisper")).eval()
                     heads = self.model._buffers.pop("alignment_heads")
                     try:
                         self.model.to(self.device)
                     finally:
                         self.model.register_buffer("alignment_heads", heads, persistent=False)
                 else:
-                    self.model = whisper.load_model("turbo", device=self.device).eval()
+                    self.model = whisper.load_model("turbo", device=self.device, download_root=str(PRIVATE / "models" / "whisper")).eval()
             finally:
                 urllib.request.urlopen = original
         else:
-            self.model, self.processor = load_hf_model(HF_MODEL_IDS[self.name], self.device)
+            self.model, self.processor = load_hf_model(HF_MODEL_IDS[self.name], self.device,
+                                                       cache_dir=str(PRIVATE / "models" / "huggingface" / "hub"))
 
     def transcribe(self, audio, progress):
         if self.name == "turbo":

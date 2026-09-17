@@ -10,7 +10,9 @@ internal static class Program
     {
         // Developer launcher lives in <repository>/build/launcher, not a release package.
         string root = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", ".."));
-        string python = Path.Combine(root, ".venv", "Scripts", "pythonw.exe");
+        string python = Path.Combine(root, ".runtime", "venv", "Scripts", "pythonw.exe");
+        if (!File.Exists(Path.Combine(root, ".runtime", "ready.json")))
+            python = Path.Combine(root, ".venv", "Scripts", "pythonw.exe");
         if (!File.Exists(python))
         {
             MessageBox.Show("Setup is needed before the app can start.\n\nRun scripts\\setup-dev.ps1 in the project folder, then open Easy Japanese Subtitles again.\n\nSee README.md for setup instructions.", "Easy Japanese Subtitles", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -35,6 +37,16 @@ internal static class Program
                 };
                 process.StartInfo.EnvironmentVariables["PYTHONUTF8"] = "1";
                 process.StartInfo.EnvironmentVariables["PYTHONNOUSERSITE"] = "1";
+                process.StartInfo.EnvironmentVariables.Remove("PYTHONHOME");
+                process.StartInfo.EnvironmentVariables.Remove("PYTHONPATH");
+                string runtimeDir = Path.Combine(root, ".runtime");
+                string tempDir = Path.Combine(runtimeDir, "tmp");
+                Directory.CreateDirectory(tempDir);
+                process.StartInfo.EnvironmentVariables["TEMP"] = tempDir;
+                process.StartInfo.EnvironmentVariables["TMP"] = tempDir;
+                process.StartInfo.EnvironmentVariables["HF_HOME"] = Path.Combine(runtimeDir, "models", "huggingface");
+                process.StartInfo.EnvironmentVariables["HF_HUB_CACHE"] = Path.Combine(runtimeDir, "models", "huggingface", "hub");
+                process.StartInfo.EnvironmentVariables["XDG_CACHE_HOME"] = Path.Combine(runtimeDir, "cache");
                 process.OutputDataReceived += (sender, e) => { if (e.Data != null) lock (log) log.WriteLine(e.Data); };
                 process.ErrorDataReceived += (sender, e) => { if (e.Data != null) lock (log) log.WriteLine(e.Data); };
                 process.Start();

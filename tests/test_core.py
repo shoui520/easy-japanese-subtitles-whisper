@@ -96,11 +96,37 @@ def test_api_rejects_foreign_pages_and_missing_token(tmp_path):
 
 
 def test_missing_dependencies_without_host_path(tmp_path,monkeypatch):
+    monkeypatch.setattr('app.runtime.PRIVATE', tmp_path/'missing-private-runtime')
     monkeypatch.setenv('PATH',str(tmp_path))
     with pytest.raises(RuntimeError,match='was not found'):executable('ffmpeg')
     # UI core imports independently of model packages and user site.
     result=subprocess.run([sys.executable,'-I','-S','-c',f"import sys;sys.path.insert(0,{str(ROOT)!r});import app.media,app.backends,app.jobs;print('isolated')"],capture_output=True,text=True)
     assert result.returncode==0,result.stderr
+
+
+def test_private_media_tools_precede_path_and_explicit_override_wins(tmp_path, monkeypatch):
+    private = tmp_path/'private'
+    monkeypatch.setattr('app.runtime.PRIVATE', private)
+    monkeypatch.setenv('PATH', str(tmp_path/'empty-path'))
+    for name in ('ffmpeg', 'ffprobe'):
+        owned = private/'ffmpeg/ffmpeg-9.0.1-essentials_build/bin'/f'{name}.exe'
+        owned.parent.mkdir(parents=True, exist_ok=True)
+        owned.touch()
+        custom = tmp_path/f'custom-{name}.exe'; custom.touch()
+        assert executable(name) == str(owned.resolve())
+        assert executable(name, str(custom)) == str(custom.resolve())
+        with pytest.raises(RuntimeError):
+            executable(name, str(tmp_path/'missing.exe'))
+
+
+def test_private_python_requires_success_marker(tmp_path, monkeypatch):
+    from app.runtime import default_python
+    monkeypatch.setattr('app.runtime.PRIVATE', tmp_path)
+    python = tmp_path/'venv/Scripts/python.exe'
+    python.parent.mkdir(parents=True); python.touch()
+    assert default_python() == sys.executable
+    (tmp_path/'ready.json').write_text('{}')
+    assert default_python() == str(python)
 
 
 def test_restart_marks_running_as_interrupted(tmp_path):

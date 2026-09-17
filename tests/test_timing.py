@@ -1,16 +1,18 @@
 """Synthetic delayed audio proves extraction preserves the subtitle time origin."""
-import shutil
 import wave
 
 import pytest
 
 from app.media import audio_command, extract_with_progress, run, subtitle_regions
+from app.runtime import executable
 
 
-@pytest.mark.skipif(not shutil.which('ffmpeg'),reason='FFmpeg integration test')
 def test_delayed_audio_shares_subtitle_timeline(tmp_path):
     import numpy as np
-    ffmpeg=shutil.which('ffmpeg')
+    try:
+        ffmpeg=executable('ffmpeg')
+    except RuntimeError:
+        pytest.skip('FFmpeg integration test requires private tools or FFmpeg on PATH')
     subtitle=tmp_path/'guide.srt'
     subtitle.write_text('1\n00:00:01,000 --> 00:00:02,000\nDialogue\n',encoding='utf-8')
     source=tmp_path/"[test] Queen's 日本語.mkv"

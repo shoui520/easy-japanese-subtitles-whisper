@@ -13,7 +13,7 @@ from pathlib import Path
 from anime_subs import save_srt
 from app.backends import MODELS
 from app.media import enumerate_videos, inspect
-from app.runtime import DATA, ROOT, ProcessTree, executable, friendly_error
+from app.runtime import DATA, ROOT, ProcessTree, executable, friendly_error, default_python
 from app.progress import apply_event
 from app.temporary import clean_stale, job_directory
 
@@ -36,7 +36,7 @@ class Queue:
         self.tree = None
         self.active_id = None
         self.thread = None
-        self.settings = {"python": sys.executable, "ffmpeg": "", "ffprobe": "", "device": "auto", "model": "anime", "recursive": True}
+        self.settings = {"python": default_python(), "ffmpeg": "", "ffprobe": "", "device": "auto", "model": "anime", "recursive": True}
         self.restore()
 
     def restore(self):
@@ -45,6 +45,11 @@ class Queue:
             try:
                 saved = json.loads(state.read_text(encoding="utf-8"))
                 self.settings.update(saved.get("settings", {}))
+                if Path(self.settings["python"]).resolve() in {
+                    ROOT / ".venv" / "Scripts" / "python.exe",
+                    ROOT / ".venv" / "Scripts" / "pythonw.exe",
+                }:
+                    self.settings["python"] = default_python()
                 self.items = saved.get("items", [])
                 for item in self.items:
                     if item["status"] in ACTIVE:

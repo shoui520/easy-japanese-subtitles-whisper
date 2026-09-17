@@ -7,7 +7,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, HTMLResponse, Response
 
 from app.backends import MODELS
-from app.runtime import ROOT, check_python, python_candidates
+from app.runtime import ROOT, check_python, python_candidates, executable
 
 
 def create_app(queue, token):
@@ -97,11 +97,15 @@ def create_app(queue, token):
 
     @api.post("/api/diagnostics")
     def diagnostics():
-        import shutil
+        def media_tool(name):
+            try:
+                return executable(name, queue.settings[name])
+            except RuntimeError:
+                return None
         candidates = [queue.settings["python"]]
         return {"runtimes": [check_python(p) for p in candidates],
-                "ffmpeg": queue.settings["ffmpeg"] or shutil.which("ffmpeg"),
-                "ffprobe": queue.settings["ffprobe"] or shutil.which("ffprobe")}
+                "ffmpeg": media_tool("ffmpeg"),
+                "ffprobe": media_tool("ffprobe")}
 
     @api.get("/api/log/{item_id}")
     def log(item_id: str):
