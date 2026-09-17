@@ -5,7 +5,7 @@ using System.Windows.Forms;
 internal static class SetupWindowSmoke {
     [STAThread]
     private static int Main(string[] args) {
-        bool fail=args[1]=="fail", sawFailure=false, timedOut=false, sawProgress=false;
+        bool fail=args[1]=="fail", sawFailure=false, timedOut=false, sawProgress=false, sawInstall=false;
         Application.EnableVisualStyles();
         using(var window=new SetupWindow(args[0])) {
             // Exercise our form without displaying a test window to the user.
@@ -18,6 +18,10 @@ internal static class SetupWindowSmoke {
                 var retry=(Button)typeof(SetupWindow).GetField("retry",BindingFlags.NonPublic|BindingFlags.Instance).GetValue(window);
                 var progress=(ProgressBar)typeof(SetupWindow).GetField("progress",BindingFlags.NonPublic|BindingFlags.Instance).GetValue(window);
                 if(progress.Value==50)sawProgress=true;
+                var detail=(Label)typeof(SetupWindow).GetField("detail",BindingFlags.NonPublic|BindingFlags.Instance).GetValue(window);
+                if(progress.Value==25 && progress.Style==ProgressBarStyle.Continuous &&
+                    stage.Text=="Installing application components" && detail.Text.Contains("1 of 4 packages installed") &&
+                    detail.Text.Contains("Installing numpy"))sawInstall=true;
                 if(fail&&stage.Text=="Setup needs attention"&&retry.Enabled){
                     sawFailure=window.DialogResult!=DialogResult.OK;
                     window.Close();
@@ -30,6 +34,7 @@ internal static class SetupWindowSmoke {
             Application.Run(window);timer.Dispose();
             if(timedOut)return 2;
             if(!sawProgress)return 5;
+            if(!sawInstall)return 6;
             if(fail)return sawFailure?0:3;
             return window.DialogResult==DialogResult.OK?0:4;
         }

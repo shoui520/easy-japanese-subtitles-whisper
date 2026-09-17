@@ -5,6 +5,10 @@ import subprocess
 import sys
 import threading
 import time
+import zipfile
+from types import SimpleNamespace
+
+import pytest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from app.runtime import ROOT
@@ -34,7 +38,7 @@ def test_download_percentage_speed_eta_and_install_stage(capsys):
     assert '0m 02s left' in halfway['detail']
     assert result[-2]['progress'] == 1
     assert result[-1]['stage'] == 'Installing transcription engine'
-    assert result[-1]['progress'] is None
+    assert result[-1]['progress'] == 0
 
 
 def test_unknown_total_and_resumed_download(capsys):
@@ -79,3 +83,49 @@ def test_real_pip_download_emits_live_progress_and_preserves_failure(tmp_path):
         server.shutdown()
         server.server_close()
         thread.join()
+
+
+def test_install_progress_counts_only_successes_and_reports_elapsed(capsys):
+    def slow_install():
+        time.sleep(1.1)
+    def failed_install():
+        raise RuntimeError('disk full')
+    requirements = [SimpleNamespace(name='first', install=slow_install),
+                    SimpleNamespace(name='second', install=failed_install)]
+    def install_all(requirements):
+        for requirement in requirements:
+            requirement.install()
+    with pytest.raises(RuntimeError, match='disk full'):
+        module.install_with_progress(install_all, requirements, 'components')
+    result = events(capsys.readouterr().out)
+    assert any('01s elapsed' in event['detail'] for event in result)
+    assert any('1 of 2 packages installed' in event['detail'] for event in result)
+    assert result[-1]['progress'] == .5
+    assert not any(event['progress'] == 1 for event in result)
+    assert requirements[0].install is slow_install
+    assert requirements[1].install is failed_install
+
+
+@pytest.mark.parametrize('count', [1, 3])
+def test_real_pip_install_reports_each_completed_package(tmp_path, count):
+    wheels = []
+    for i in range(count):
+        name = f'progress_fixture_{i}'
+        wheel = tmp_path / f'{name}-1.0-py3-none-any.whl'
+        info = f'{name}-1.0.dist-info'
+        with zipfile.ZipFile(wheel, 'w') as archive:
+            archive.writestr(f'{name}/__init__.py', 'VALUE = 1\n')
+            archive.writestr(f'{info}/METADATA', f'Metadata-Version: 2.1\nName: {name}\nVersion: 1.0\n')
+            archive.writestr(f'{info}/WHEEL', 'Wheel-Version: 1.0\nGenerator: test\nRoot-Is-Purelib: true\nTag: py3-none-any\n')
+            archive.writestr(f'{info}/RECORD', '')
+        wheels.append(str(wheel))
+    result = subprocess.run([sys.executable, str(ROOT / 'scripts/install-progress.py'),
+        'test components', 'install', '--no-index', '--no-deps', '--target', str(tmp_path / 'installed'),
+        *wheels], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    progress = events(result.stdout)
+    for completed in range(count + 1):
+        assert any(f'{completed} of {count} packages installed' in event['detail'] and
+                   event['progress'] == completed / count for event in progress), result.stdout
+    assert any('Installing progress' in event['detail'] for event in progress)
+    assert progress[-1]['stage'] == 'Installed test components'

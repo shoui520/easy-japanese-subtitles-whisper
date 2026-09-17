@@ -2,6 +2,8 @@ param([switch]$Resume, [switch]$WaitForStart, [string]$Compute)
 if ($WaitForStart -and [Console]::ReadLine() -ne 'GO') { exit 1 }
 [Console]::WriteLine('SETUP {"stage":"Downloading media tools","detail":"Test progress","progress":0.5}')
 Start-Sleep -Milliseconds 300
+[Console]::WriteLine('SETUP {"stage":"Installing application components","detail":"1 of 4 packages installed (25%)\nInstalling numpy - 0m 01s elapsed","progress":0.25}')
+Start-Sleep -Milliseconds 300
 if ($env:SETUP_TEST_FAIL -eq '1') { exit 1 }
 $root = Split-Path -Parent $PSScriptRoot
 New-Item -ItemType Directory -Path (Join-Path $root '.runtime') -Force | Out-Null
