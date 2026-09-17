@@ -26,7 +26,6 @@ Get-ChildItem -LiteralPath $appRoot -Recurse -File | Where-Object {
 }
 New-Item -ItemType Directory -Path (Join-Path $internal 'scripts') -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $project 'scripts/setup-private-runtime.ps1') -Destination (Join-Path $internal 'scripts')
-Copy-Item -LiteralPath (Join-Path $project 'release/Read me.txt') -Destination $stage
 & (Join-Path $PSScriptRoot 'build-launcher.ps1') -OutputDirectory $stage -PortableRelease
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [IO.Compression.ZipFile]::CreateFromDirectory($stage, $zip)

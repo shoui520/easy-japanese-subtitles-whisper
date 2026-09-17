@@ -47,9 +47,9 @@ def test_built_zip_extracted_backend_with_clean_path(tmp_path):
     with zipfile.ZipFile(archive) as package:
         names = package.namelist()
         assert 'Easy Japanese Subtitles.exe' in names
-        assert 'Read me.txt' in names
+        assert 'Read me.txt' not in names
         assert '_internal/app/ui/index.html' in names
-        assert all(name.startswith('_internal/') or name in {'Easy Japanese Subtitles.exe', 'Read me.txt'} for name in names)
+        assert all(name.startswith('_internal/') or name == 'Easy Japanese Subtitles.exe' for name in names)
         assert not any(part in {'.runtime', '.app-data', '.git', 'tests', '__pycache__', '.venv'}
                        for name in names for part in Path(name).parts)
         assert not any(name.endswith('requirements-dev.txt') for name in names)
