@@ -1,0 +1,6 @@
+pywebview==6.2.1
+fastapi==0.141.1
+uvicorn==0.53.0
+transformers==4.57.6
+accelerate>=1.0,<2
+openai-whisper==20250625

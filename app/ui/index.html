@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Easy Japanese Subtitles</title><link rel="stylesheet" href="/assets/style.css"></head>
+<body>
+<main>
+  <header><div><div class="eyebrow">LOCAL VIDEO → JAPANESE SUBTITLES</div><h1>Easy Japanese Subtitles<span>字幕</span></h1><p>Drop your episodes. Get Japanese subtitles beside each video.</p></div><button id="setupButton" class="quiet">Setup & diagnostics</button></header>
+  <div id="error" role="alert" hidden></div>
+  <div id="testBanner" role="status" hidden></div>
+  <div id="runtimeStatus" class="runtime-status" role="status">Checking the local transcription engine…</div>
+  <section id="dropzone" class="dropzone"><div class="dropmark">＋</div><h2>Drop videos or whole folders here</h2><p>MKV, MP4, AVI and more. Add as many as you like. Your original videos stay untouched.</p><div class="actions"><button id="addFiles">Add files</button><button id="addFolder" class="quiet">Add folder</button><label><input id="recursive" type="checkbox" checked> Include subfolders</label></div></section>
+  <section class="toolbar"><label>Transcription model<select id="model"><option value="anime">Japanese Anime</option><option value="turbo">Whisper Turbo</option><option value="large">Japanese Large · more memory</option></select></label><button id="start" class="primary">Start queue</button><button id="stop" class="quiet">Cancel all</button></section>
+  <section class="queue-heading"><h2>Your queue <span id="count">0</span></h2><div><span id="summary">Ready when you are</span><button id="clear" class="text-button">Clear inactive</button></div></section>
+  <progress id="overall" value="0" max="1"></progress>
+  <section id="activity" aria-live="polite" hidden></section>
+  <div id="queue"><div class="empty">No episodes yet. Add files or a folder to get started.</div></div>
+</main>
+<dialog id="setup"><form method="dialog"><button class="close" aria-label="Close">×</button></form><h2>Setup & diagnostics</h2><p>Use your prepared Python environment and installed FFmpeg. Nothing is installed or changed automatically.</p><label>Python executable<input id="python" type="text"></label><label>FFmpeg executable <small>(blank = discover on PATH)</small><input id="ffmpeg" type="text" placeholder="Auto-detect"></label><label>FFprobe executable<input id="ffprobe" type="text" placeholder="Auto-detect"></label><label>Processing device<select id="device"><option value="auto">Automatic · CUDA when available, otherwise CPU</option><option value="cuda">CUDA</option><option value="cpu">CPU · slower</option></select></label><p class="hint">Run scripts/setup-dev.ps1 in the project folder to set up the required Python environment. For FFmpeg: <code>winget install --id Gyan.FFmpeg -e</code>. Python can be installed with Python Install Manager.</p><div class="actions"><button id="saveSetup">Save settings</button><button id="check" class="quiet">Check requirements</button></div><pre id="diagnostics">Click Check requirements to inspect Python, packages, and GPU.</pre></dialog>
+<dialog id="logDialog"><form method="dialog"><button class="close" aria-label="Close">×</button></form><h2>Processing log</h2><p id="logStatus" role="status">Connecting…</p><p>Scroll up to read earlier lines; scroll to the bottom to follow. Local diagnostics may contain source paths.</p><pre id="logText"></pre></dialog>
+<script src="/assets/app.js"></script>
+</body></html>
