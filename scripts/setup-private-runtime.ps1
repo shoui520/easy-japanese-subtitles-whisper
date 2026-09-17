@@ -69,13 +69,20 @@ function Fetch-Verified($Url, $Destination, $Sha256) {
             $buffer = New-Object byte[] 1048576
             $received = [long]0
             $timer = [Diagnostics.Stopwatch]::StartNew()
+            $elapsed = [Diagnostics.Stopwatch]::StartNew()
             while (($count = $inputStream.Read($buffer, 0, $buffer.Length)) -gt 0) {
                 $outputStream.Write($buffer, 0, $count)
                 $received += $count
                 if ($timer.ElapsedMilliseconds -ge 300) {
                     $fraction = $null
                     if ($response.ContentLength -gt 0) { $fraction = [Math]::Min(1, $received / $response.ContentLength) }
-                    Report-Setup ("Downloading $label") (([Math]::Round($received / 1MB, 1)).ToString() + ' MB downloaded') $fraction
+                    $speed = $received / [Math]::Max(0.001, $elapsed.Elapsed.TotalSeconds)
+                    $detail = '{0:N1} MB downloaded | {1:N1} MB/s' -f ($received / 1MB), ($speed / 1MB)
+                    if ($response.ContentLength -gt 0) {
+                        $remaining = [TimeSpan]::FromSeconds([Math]::Max(0, ($response.ContentLength - $received) / $speed))
+                        $detail = '{0:N1} / {1:N1} MB ({2:P0}) | {3:N1} MB/s | about {4}m {5:D2}s left' -f ($received / 1MB), ($response.ContentLength / 1MB), $fraction, ($speed / 1MB), ([int][Math]::Floor($remaining.TotalMinutes)), $remaining.Seconds
+                    }
+                    Report-Setup ("Downloading $label") $detail $fraction
                     $timer.Restart()
                 }
             }
@@ -124,11 +131,11 @@ Report-Setup 'Preparing environment' 'Creating the private Python environment'
 & (Join-Path $base 'python.exe') -m venv $venv
 if ($LASTEXITCODE -ne 0) { throw 'Could not create the private venv.' }
 $python = Join-Path $venv 'Scripts/python.exe'
-Report-Setup 'Installing transcription engine' 'Downloading and installing the engine. This may take several minutes.'
-& $python -m pip --isolated install --no-cache-dir "torch==2.11.0+$Compute" --index-url "https://download.pytorch.org/whl/$Compute"
+Report-Setup 'Preparing transcription engine' 'Checking which components need downloading'
+& $python -u (Join-Path $PSScriptRoot 'install-progress.py') 'transcription engine' install --no-cache-dir "torch==2.11.0+$Compute" --index-url "https://download.pytorch.org/whl/$Compute"
 if ($LASTEXITCODE -ne 0) { throw 'Private PyTorch installation failed.' }
 Report-Setup 'Installing application components' 'Downloading and installing required packages'
-& $python -m pip --isolated install --no-cache-dir -r (Join-Path $project 'requirements.txt') -c (Join-Path $project 'constraints-windows-py314.txt') --index-url https://pypi.org/simple
+& $python -u (Join-Path $PSScriptRoot 'install-progress.py') 'application components' install --no-cache-dir -r (Join-Path $project 'requirements.txt') -c (Join-Path $project 'constraints-windows-py314.txt') --index-url https://pypi.org/simple
 if ($LASTEXITCODE -ne 0) { throw 'Private package installation failed.' }
 Report-Setup 'Checking installation' 'Checking that the components work together'
 & $python -m pip check
