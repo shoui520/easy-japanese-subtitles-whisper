@@ -35,7 +35,9 @@ automatic first-run bootstrapper or public portable release.
 - `.venv/`, `.app-data/`, `.test-artifacts/`: local environment, settings/logs,
   and test media/results (Git ignored).
 
-The launcher in `build/launcher/` runs this checkout's source and root `.venv`.
+The launcher in `build/launcher/` runs this checkout's source and private `.runtime`.
+If required components are missing it offers setup with a progress window.
+For developer-only runs using the root `.venv`, invoke `python -m app.main` directly.
 It is not a standalone portable release. Keep it in that location; moving the
 whole checkout together is supported. Rebuilding does not change your queue or logs.
 

@@ -12,6 +12,7 @@ export async function verify(project) {
     replaceChildren(...nodes){this.children=nodes;}
     addEventListener(name,fn){this.listeners[name]=fn;}
     setAttribute(name,value){this[name]=value;}
+    removeAttribute(name){delete this[name];}
     contains(){return false;}
     showModal(){this.open=true;}
     close(){this.open=false;this.listeners.close?.();}
@@ -49,6 +50,28 @@ export async function verify(project) {
   vm.runInContext('state.settings.device="cuda";render()',context);
   assert.equal(vm.runInContext('selectedCompute()',context),undefined);
   assert.equal(node('start').disabled,true);
+  const originalItems=context.fixture.items;
+  context.fixture.items=[{id:'download',status:'processing',stage:'Downloading model',progress:.5,downloaded_bytes:1048576,download_bytes:2097152}];
+  vm.runInContext('renderModelSetup(state.items)',context);
+  assert.equal(node('downloadSetup').open,true);
+  assert.equal(node('downloadProgress').value,.5);
+  assert.match(node('downloadBytes').textContent,/1.0 MB \/ 2.0 MB/);
+  context.fixture.items[0].stage='Loading model';
+  vm.runInContext('renderModelSetup(state.items)',context);
+  assert.equal(node('downloadSetup').open,true);
+  assert.equal(node('downloadProgress').value,undefined);
+  context.fixture.items[0].stage='Transcribing';
+  vm.runInContext('renderModelSetup(state.items)',context);
+  assert.equal(node('downloadSetup').open,false);
+  context.fixture.items[0].stage='Downloading model';
+  vm.runInContext('renderModelSetup(state.items)',context);
+  Object.assign(context.fixture.items[0],{status:'failed',stage:'Failed',error:'Network interrupted'});
+  vm.runInContext('renderModelSetup(state.items)',context);
+  assert.equal(node('downloadSetup').open,true);
+  assert.equal(node('downloadRetry').hidden,false);
+  assert.match(node('downloadStage').textContent,/Network interrupted/);
+  vm.runInContext('modelSetup=null',context);node('downloadSetup').close();
+  context.fixture.items=originalItems;
   vm.runInContext("state.output_override='C:/test-output';render()",context);
   assert.equal(node('testBanner').hidden,false);
   assert.match(node('testBanner').textContent,/will NOT appear beside/);

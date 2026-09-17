@@ -41,6 +41,47 @@ function selectedCompute(){
  const requested=state?.settings?.device||'auto';
  return devices.find(d=>d.available&&(requested==='auto'||d.id===requested));
 }
+let modelSetup=null;
+function renderModelSetup(items){
+ const dialog=$('downloadSetup');
+ if(!modelSetup){
+  const item=items.find(i=>i.status==='processing'&&i.stage==='Downloading model');
+  if(!item)return;
+  modelSetup={id:item.id};
+ }
+ const item=items.find(i=>i.id===modelSetup.id);
+ if(!item){if(dialog.open)dialog.close();modelSetup=null;return;}
+ const pending=item.status==='processing'&&['Downloading model','Loading model'].includes(item.stage);
+ const failed=['failed','cancelled','interrupted'].includes(item.status)||item.stage==='Failed';
+ if(!pending&&!failed){if(dialog.open)dialog.close();modelSetup=null;return;}
+ if(!dialog.open)dialog.showModal();
+ $('downloadTitle').textContent=failed?(item.status==='cancelled'?'Download cancelled':'Model setup needs attention'):'Preparing your model';
+ $('downloadStage').textContent=failed?(item.error||'The download could not finish. Retry when ready.'):
+   item.stage==='Loading model'?'Download finished. Loading the model…':item.detail||'Downloading model files…';
+ const bar=$('downloadProgress');bar.max=1;
+ if(pending&&item.stage==='Downloading model'&&item.progress!=null)bar.value=item.progress;
+ else bar.removeAttribute('value');
+ bar.hidden=failed;
+ $('downloadBytes').textContent=pending&&item.stage==='Downloading model'?
+  ((item.downloaded_bytes||0)/1024/1024).toFixed(1)+' MB'+(item.download_bytes?' / '+(item.download_bytes/1024/1024).toFixed(1)+' MB':' downloaded'):'';
+ $('downloadRetry').hidden=!failed;
+ $('downloadRetry').disabled=state.running;
+ $('downloadDismiss').textContent=failed?'Close':'Cancel queue';
+}
+$('downloadSetup').addEventListener('cancel',event=>{event.preventDefault();$('downloadDismiss').onclick();});
+$('downloadDismiss').onclick=()=>action(async()=>{
+ if(!modelSetup)return;
+ const item=state.items.find(i=>i.id===modelSetup.id);
+ if(item?.status==='processing'&&item.stage!=='Failed')await api('cancel',{});
+ else {$('downloadSetup').close();modelSetup=null;}
+});
+$('downloadRetry').onclick=()=>action(async()=>{
+ if(!modelSetup)return;
+ const id=modelSetup.id;
+ await api('edit/'+id,{});
+ $('downloadSetup').close();modelSetup=null;
+ await api('start',{});
+});
 function progressPanel(item){
  const panel=el('div','progress-panel');
  const heading=el('div','progress-heading');
@@ -76,6 +117,7 @@ function progressPanel(item){
 }
 function render(){
  const items=state.items;
+ renderModelSetup(items);
  const finished=items.filter(i=>['complete','skipped','failed','cancelled'].includes(i.status)).length;
  const saved=items.filter(i=>i.status==='complete').length;
  const failed=items.filter(i=>i.status==='failed').length;

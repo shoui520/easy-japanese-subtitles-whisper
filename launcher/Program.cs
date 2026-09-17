@@ -2,6 +2,9 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Windows.Forms;
+using System.Threading;
+using System.Security.Cryptography;
+using System.Text;
 
 internal static class Program
 {
@@ -10,13 +13,31 @@ internal static class Program
     {
         // Developer launcher lives in <repository>/build/launcher, not a release package.
         string root = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", ".."));
+        string key;
+        using(var hash=SHA256.Create()) key=BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(root.ToLowerInvariant()))).Replace("-", "");
+        using(var instance=new Mutex(false, "Local\\EasyJapaneseSubtitles-"+key)) {
+            bool acquired=false;
+            try {
+                try { acquired=instance.WaitOne(0); } catch(AbandonedMutexException) { acquired=true; }
+                if(!acquired) { MessageBox.Show("The app or its setup is already running.", "Easy Japanese Subtitles"); return; }
+                try { Run(root); }
+                catch(Exception error) { MessageBox.Show("The app could not start setup. Check that the app folder is writable.\n\n"+error.Message, "Easy Japanese Subtitles", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            } finally { if(acquired)instance.ReleaseMutex(); }
+        }
+    }
+
+    private static void Run(string root)
+    {
         string python = Path.Combine(root, ".runtime", "venv", "Scripts", "pythonw.exe");
-        if (!File.Exists(Path.Combine(root, ".runtime", "ready.json")))
-            python = Path.Combine(root, ".venv", "Scripts", "pythonw.exe");
-        if (!File.Exists(python))
+        string tools=Path.Combine(root,".runtime","ffmpeg","ffmpeg-9.0.1-essentials_build","bin");
+        if (!File.Exists(python) || !File.Exists(Path.Combine(root,".runtime","ready.json")) ||
+            !File.Exists(Path.Combine(tools,"ffmpeg.exe")) || !File.Exists(Path.Combine(tools,"ffprobe.exe")))
         {
-            MessageBox.Show("Setup is needed before the app can start.\n\nRun scripts\\setup-dev.ps1 in the project folder, then open Easy Japanese Subtitles again.\n\nSee README.md for setup instructions.", "Easy Japanese Subtitles", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
+            Application.EnableVisualStyles();
+            using(var setup = new SetupWindow(root)) {
+                if(setup.ShowDialog()!=DialogResult.OK) return;
+            }
+            python=Path.Combine(root,".runtime","venv","Scripts","pythonw.exe");
         }
         try
         {

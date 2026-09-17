@@ -12,9 +12,24 @@ Run with Windows PowerShell 5.1:
 & "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File .\scripts\setup-private-runtime.ps1
 ```
 
-The execution-policy flag applies only to this invocation. Setup refuses to replace
-an existing `.runtime/venv`; this is a fresh-install verification helper, not yet an
-end-user repair/download wizard. Interrupted installs are retained for diagnosis.
+The execution-policy flag applies only to this invocation. Direct setup refuses to
+replace an existing `.runtime/venv` unless `-Resume` is supplied and the directory
+is identified as app-owned. Interrupted installs are retained for diagnosis. Retry
+reuses verified archives; incomplete downloads restart. The helper refuses to
+repair the runtime while its Python processes are running.
+
+The native launcher opens a setup window when the private runtime/media tools are
+missing. After choosing the CUDA or CPU runtime and pressing Set up, it displays
+download progress and installation stages. It closes automatically on successful
+setup and opens the main app. Errors stay visible with Retry and a setup-log link.
+Cancel/closing setup kills the gated installer process tree using a Windows Job
+Object. Intel/AMD worker-runtime selection remains covered by the separate GPU guide.
+
+Model downloads happen in a dialog inside the web UI. This appears only for actual
+downloads, not every cached model load, and closes when model loading completes.
+Failure stays visible; cancelling stops the queue. A retry is available after the
+queue has stopped. Unknown-length downloads/package installations are indeterminate,
+not assigned fabricated percentages.
 
 ## Local layout (all Git ignored)
 
@@ -29,7 +44,7 @@ end-user repair/download wizard. Interrupted installs are retained for diagnosis
   ready.json       written only after installation and pip check succeed
 ```
 
-The launcher prefers `.runtime/venv` when ready. Explicit custom Python/tool choices
+The launcher uses `.runtime/venv` when ready. Explicit custom Python/tool choices
 remain supported. Existing settings pointing at the old app-managed `.venv` migrate
 to the new app-managed runtime. Default media discovery prefers the private Gyan
 executables, then falls back to PATH. Diagnostics uses exactly the same resolver.
