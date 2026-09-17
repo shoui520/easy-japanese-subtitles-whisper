@@ -35,14 +35,20 @@ for name,dist in [("torch","torch"),("transformers","transformers"),("whisper","
  except m.PackageNotFoundError:r["packages"][name]=None
 try:
  import torch
- r["cuda"]=torch.cuda.is_available()
- r["gpu"]=torch.cuda.get_device_name(0) if r["cuda"] else None
- r["vram_gb"]=round(torch.cuda.get_device_properties(0).total_memory/1024**3,1) if r["cuda"] else None
+ from app.devices import discover,select_device
+ r["devices"]=discover(torch)
+ selected=select_device("auto",r["devices"])
+ r["cuda"]=any(d["id"]=="cuda" and d["available"] for d in r["devices"])
+ r["gpu"]=selected.get("name") if selected["id"]!="cpu" else None
+ r["vram_gb"]=selected.get("vram_gb")
+ r["compute"]=selected["id"]
+ r["torch_cuda"]=torch.version.cuda
+ r["torch_hip"]=getattr(torch.version,"hip",None)
 except Exception as e:r["cuda"]=False;r["error"]=str(e)
 print(json.dumps(r))'''
     try:
         result = subprocess.run([path, "-c", code], capture_output=True, text=True,
-                                timeout=60, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+                                timeout=60, cwd=ROOT, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
         return json.loads(result.stdout.strip().splitlines()[-1])
     except Exception:
         return {"python": path, "error": "This Python could not start or load its transcription packages.", "packages": {}}
@@ -61,8 +67,8 @@ def friendly_error(exc):
         return "A required file is no longer available. Check the source video and selected tool paths, then add it again."
     if any(x in lowered for x in ("connectionerror", "connection error", "connection refused", "connection reset", "timed out", "timeout", "http error", "httpsconnectionpool", "network is unreachable", "download interrupted")):
         return "The model download could not finish. Check your connection and retry; cached files are kept."
-    if "cuda" in lowered:
-        return "GPU processing could not start. Check your NVIDIA driver or select CPU in Setup."
+    if any(x in lowered for x in ("cuda", "xpu", "rocm", "hip error", "sycl")):
+        return "GPU processing failed. Check that the selected Python has the matching CUDA, XPU, or ROCm build and your GPU/driver is supported; or select CPU. View the log for details."
     return message[:600] or "Processing failed. Open the log for details."
 
 

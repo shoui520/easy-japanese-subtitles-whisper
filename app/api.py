@@ -87,8 +87,8 @@ def create_app(queue, token):
                 raise ValueError("Stop the queue before changing processing settings.")
             if body.get("model", queue.settings["model"]) not in MODELS:
                 raise ValueError("Unknown transcription model.")
-            if body.get("device", queue.settings["device"]) not in {"auto", "cuda", "cpu"}:
-                raise ValueError("Choose automatic, NVIDIA, or CPU.")
+            if body.get("device", queue.settings["device"]) not in {"auto", "cuda", "xpu", "rocm", "cpu"}:
+                raise ValueError("Choose Automatic, CUDA, XPU, ROCm / HIP, or CPU.")
             for key in queue.settings:
                 if key in body:
                     queue.settings[key] = body[key]

@@ -23,7 +23,18 @@ class WhisperBackend:
                 return original(*args, **kwargs)
             urllib.request.urlopen = with_timeout
             try:
-                self.model = whisper.load_model("turbo", device=self.device).eval()
+                if self.device.startswith("xpu"):
+                    # Whisper's sparse alignment-head buffer is only used for word
+                    # alignment (disabled here). Keep it on CPU: XPU sparse support
+                    # must not be required for ordinary segment timestamps.
+                    self.model = whisper.load_model("turbo", device="cpu").eval()
+                    heads = self.model._buffers.pop("alignment_heads")
+                    try:
+                        self.model.to(self.device)
+                    finally:
+                        self.model.register_buffer("alignment_heads", heads, persistent=False)
+                else:
+                    self.model = whisper.load_model("turbo", device=self.device).eval()
             finally:
                 urllib.request.urlopen = original
         else:

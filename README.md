@@ -86,7 +86,9 @@ backend reports them. The log refreshes while open and preserves scroll position
 
 All three adapters use the original prototype's decoding logic. Anime/Large use
 Transformers with their own tokenizer; Turbo uses official OpenAI Whisper.
-FP16 runs on CUDA; CPU uses FP32. AMD/Intel acceleration has not been implemented.
+FP16 runs on CUDA, XPU, and ROCm/HIP; CPU uses FP32. Intel/AMD routes are implemented
+but are not yet hardware-verified. See [GPU runtime setup](docs/gpu-runtimes.md)
+for supported runtime profiles, separate-environment setup, and testing limits.
 First use downloads model files into the standard local caches; existing cached
 weights are reused. Source audio/video is never uploaded.
 

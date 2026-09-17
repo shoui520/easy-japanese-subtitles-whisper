@@ -220,7 +220,7 @@ def load_hf_model(model_id: str, device: str = "cuda", cache_dir: str | None = N
     try:
         model = AutoModelForSpeechSeq2Seq.from_pretrained(
             model_id, dtype=torch.float16 if device != "cpu" else torch.float32, low_cpu_mem_usage=True,
-            use_safetensors=True, attn_implementation="sdpa", trust_remote_code=False,
+            use_safetensors=True, attn_implementation=("eager" if device.startswith("xpu") or getattr(torch.version, "hip", None) else "sdpa"), trust_remote_code=False,
             cache_dir=cache_dir,
         ).to(device).eval()
     except torch.cuda.OutOfMemoryError as exc:

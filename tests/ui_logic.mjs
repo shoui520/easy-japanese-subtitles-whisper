@@ -37,6 +37,18 @@ export async function verify(project) {
   assert.match(flatten(node('queue')),/C:\/A\/Episode 01.anime.ja.srt/);
   assert.match(flatten(node('queue')),/C:\/B\/Episode 01.anime.ja.srt/);
   assert.equal(node('testBanner').hidden,true);
+  context.devices=[{id:'rocm',label:'ROCm / HIP',available:true,torch_device:'cuda'},
+                   {id:'xpu',label:'XPU',available:true,torch_device:'xpu'},
+                   {id:'cpu',label:'CPU',available:true,torch_device:'cpu'}];
+  vm.runInContext('runtimeInfo={runtimes:[{devices}]};state.settings.device="auto"',context);
+  assert.equal(vm.runInContext('selectedCompute().id',context),'rocm');
+  vm.runInContext('state.settings.device="xpu"',context);
+  assert.equal(vm.runInContext('selectedCompute().id',context),'xpu');
+  vm.runInContext('state.settings.device="cpu"',context);
+  assert.equal(vm.runInContext('selectedCompute().id',context),'cpu');
+  vm.runInContext('state.settings.device="cuda";render()',context);
+  assert.equal(vm.runInContext('selectedCompute()',context),undefined);
+  assert.equal(node('start').disabled,true);
   vm.runInContext("state.output_override='C:/test-output';render()",context);
   assert.equal(node('testBanner').hidden,false);
   assert.match(node('testBanner').textContent,/will NOT appear beside/);

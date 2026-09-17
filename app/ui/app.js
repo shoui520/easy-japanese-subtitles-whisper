@@ -36,6 +36,11 @@ function duration(seconds){
  seconds=Math.max(0,Math.round(seconds));
  return Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');
 }
+function selectedCompute(){
+ const devices=runtimeInfo?.runtimes?.[0]?.devices||[];
+ const requested=state?.settings?.device||'auto';
+ return devices.find(d=>d.available&&(requested==='auto'||d.id===requested));
+}
 function progressPanel(item){
  const panel=el('div','progress-panel');
  const heading=el('div','progress-heading');
@@ -81,7 +86,7 @@ function render(){
  $('overall').value=items.length?finished/items.length:0;
  $('overall').setAttribute('aria-label','Finished files');
  const packages=runtimeInfo?.runtimes?.[0]?.packages||{};
- const ready=Boolean(!runtimeInfo?.runtimes?.[0]?.error&&packages.torch&&(state.settings.model==='turbo'?packages.whisper:packages.transformers&&packages.accelerate)&&runtimeInfo?.ffmpeg&&runtimeInfo?.ffprobe);
+ const ready=Boolean(selectedCompute()&&!runtimeInfo?.runtimes?.[0]?.error&&packages.torch&&(state.settings.model==='turbo'?packages.whisper:packages.transformers&&packages.accelerate)&&runtimeInfo?.ffmpeg&&runtimeInfo?.ffprobe);
  $('start').disabled=state.running||!items.some(i=>i.status==='ready')||!ready;
  $('stop').disabled=!state.running;
  $('model').disabled=state.running;
@@ -170,10 +175,12 @@ async function checkRequirements(){
   if(!packages.whisper)missing.push('Whisper (Turbo)');
   if(!packages.accelerate)missing.push('Accelerate');
   if(!runtimeInfo.ffmpeg||!runtimeInfo.ffprobe)missing.push('FFmpeg / FFprobe');
+  const compute=selectedCompute();
   $('runtimeStatus').textContent=missing.length?'Setup needed: '+missing.join(', ')+'. Open Setup & diagnostics.':
    runtime.error?'The engine could not load. Open Setup & diagnostics.':
-   runtime.cuda?'Ready · '+runtime.gpu+' · '+runtime.vram_gb+' GB GPU memory':
-   'Ready · CPU processing (slower) · CUDA unavailable';
+   !compute?'Selected processing device is unavailable. Choose a matching runtime in Setup or use CPU.':
+   compute.id!=='cpu'?'Ready · '+compute.label+' · '+compute.name+(compute.vram_gb?' · '+compute.vram_gb+' GB GPU memory':''):
+   'Ready · CPU processing (slower)';
   $('diagnostics').textContent=JSON.stringify(runtimeInfo,null,2);
   if(state)render();
  }catch(e){$('runtimeStatus').textContent='Could not check the engine. Open Setup & diagnostics.';throw e;}

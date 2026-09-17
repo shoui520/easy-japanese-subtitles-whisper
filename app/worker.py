@@ -11,6 +11,7 @@ from app.backends import WhisperBackend
 from app.media import audio_command, extract_with_progress, subtitle_regions
 from app.runtime import friendly_error
 from app.download_progress import report_downloads
+from app.devices import discover, select_device, smoke_test
 
 
 def emit(stage, progress=None, **fields):
@@ -21,11 +22,11 @@ def process(request):
     import torch
     source = Path(request["source"])
     job_dir = Path(request["job_dir"])
-    device = request.get("device", "auto")
-    if device == "auto":
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-    if device == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError("CUDA is unavailable. Select CPU or check the NVIDIA driver.")
+    selection = select_device(request.get("device", "auto"), discover(torch))
+    device = selection["torch_device"]
+    emit("Preparing", device=selection["id"], compute=selection,
+         detail="Checking " + selection["label"])
+    smoke_test(torch, selection)
     ffmpeg = request["ffmpeg"]
     emit("Reading subtitle timings", detail="Finding dialogue in the selected subtitle track" if request.get("subtitle_index") is not None else "Using the model's own timestamps")
     regions = None
@@ -43,7 +44,7 @@ def process(request):
                                                   total_seconds=request.get("duration", 0)), job_dir / "ffmpeg.log")
     audio = read_audio(wav)
     duration = len(audio) / SAMPLE_RATE
-    emit("Loading model", device=device, detail="Preparing the transcription model; first use may download model files")
+    emit("Loading model", device=selection["id"], detail="Preparing the transcription model; first use may download model files")
     backend = WhisperBackend(request["model"], device)
     with report_downloads(emit):
         backend.load()
