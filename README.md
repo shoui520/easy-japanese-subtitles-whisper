@@ -1,8 +1,17 @@
-# Easy Japanese Subtitles — milestone 1
+# Easy Japanese Subtitles
 
 A Windows WebView2 app for a local video → Japanese SRT workflow. Drop files or
 folders, review the automatically selected Japanese audio and full subtitle track,
 choose a model, and start the queue. Models run on your PC.
+
+## Windows release ZIP
+
+Extract the whole ZIP, then open **Easy Japanese Subtitles.exe** at its top level.
+Keep `_internal` beside it. First-run setup downloads the required components
+inside that folder; you do not need to install Python or FFmpeg yourself.
+Windows 11 x64 and Microsoft Edge WebView2 Runtime are required.
+
+To build GitHub release assets, see [release packaging](docs/releases.md).
 
 ## Run this development build
 
@@ -20,8 +29,7 @@ For an app-owned Python/FFmpeg runtime and PowerShell 5.1 clean-PATH verificatio
 see [private runtime setup](docs/private-runtime.md). It leaves the developer `.venv` intact.
 
 Python and FFmpeg are downloaded separately by that helper. WebView2 Runtime must be present. Setup does not
-change system Python packages. This is a development milestone, not the final
-automatic first-run bootstrapper or public portable release.
+change system Python packages. Release archives have their own launcher layout.
 
 ## Repository layout
 
@@ -31,15 +39,15 @@ automatic first-run bootstrapper or public portable release.
 - `scripts/build-launcher.ps1`: rebuilds the developer launcher without installing packages.
 - `tests/`: automated checks and opt-in media integration tests.
 - `build/launcher/`: generated developer launcher (Git ignored).
-- `dist/`: reserved for future release packages (Git ignored).
+- `dist/`: generated release folders, ZIPs and checksums (Git ignored).
 - `.venv/`, `.app-data/`, `.test-artifacts/`: local environment, settings/logs,
   and test media/results (Git ignored).
 
 The launcher in `build/launcher/` runs this checkout's source and private `.runtime`.
 If required components are missing it offers setup with a progress window.
 For developer-only runs using the root `.venv`, invoke `python -m app.main` directly.
-It is not a standalone portable release. Keep it in that location; moving the
-whole checkout together is supported. Rebuilding does not change your queue or logs.
+It is not the release executable. Use `scripts/build-release.ps1` to create the
+portable ZIP. Rebuilding does not change your queue or logs.
 
 ## Files and output
 

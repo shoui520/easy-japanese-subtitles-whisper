@@ -128,7 +128,7 @@ Report-Setup 'Installing transcription engine' 'Downloading and installing the e
 & $python -m pip --isolated install --no-cache-dir "torch==2.11.0+$Compute" --index-url "https://download.pytorch.org/whl/$Compute"
 if ($LASTEXITCODE -ne 0) { throw 'Private PyTorch installation failed.' }
 Report-Setup 'Installing application components' 'Downloading and installing required packages'
-& $python -m pip --isolated install --no-cache-dir -r (Join-Path $project 'requirements.txt') -r (Join-Path $project 'requirements-dev.txt') -c (Join-Path $project 'constraints-windows-py314.txt') --index-url https://pypi.org/simple
+& $python -m pip --isolated install --no-cache-dir -r (Join-Path $project 'requirements.txt') -c (Join-Path $project 'constraints-windows-py314.txt') --index-url https://pypi.org/simple
 if ($LASTEXITCODE -ne 0) { throw 'Private package installation failed.' }
 Report-Setup 'Checking installation' 'Checking that the components work together'
 & $python -m pip check

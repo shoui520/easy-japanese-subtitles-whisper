@@ -45,6 +45,10 @@ class Queue:
             try:
                 saved = json.loads(state.read_text(encoding="utf-8"))
                 self.settings.update(saved.get("settings", {}))
+                if saved.get("app_root"):
+                    old_private = Path(saved["app_root"]) / ".runtime" / "venv" / "Scripts"
+                    if Path(self.settings["python"]) in {old_private / "python.exe", old_private / "pythonw.exe"}:
+                        self.settings["python"] = default_python()
                 if Path(self.settings["python"]).resolve() in {
                     ROOT / ".venv" / "Scripts" / "python.exe",
                     ROOT / ".venv" / "Scripts" / "pythonw.exe",
@@ -61,7 +65,7 @@ class Queue:
         with self.lock:
             target = self.data / "queue.json"
             temp = target.with_suffix(".tmp")
-            temp.write_text(json.dumps({"settings": self.settings, "items": self.items}, ensure_ascii=False), encoding="utf-8")
+            temp.write_text(json.dumps({"settings": self.settings, "items": self.items, "app_root": str(ROOT)}, ensure_ascii=False), encoding="utf-8")
             temp.replace(target)
 
     def snapshot(self):

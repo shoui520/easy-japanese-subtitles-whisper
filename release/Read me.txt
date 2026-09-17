@@ -1,0 +1,38 @@
+Easy Japanese Subtitles
+
+Extract the entire ZIP into a folder you can write to, then open
+Easy Japanese Subtitles.exe. Do not run it from inside the ZIP.
+
+Windows 11, Intel/AMD x64 processor, and Microsoft Edge WebView2 Runtime
+are required. ARM64 Windows is not supported by this package.
+
+On first launch, setup downloads Python, media tools and the transcription
+engine into _internal\.runtime. Select CUDA for a compatible NVIDIA GPU,
+or CPU for other systems. First use of each model also needs internet.
+Allow several gigabytes of disk space for the engine and model downloads.
+Intel XPU and AMD ROCm are experimental adapters; their GPU runtimes are
+not installed by this first-run setup. CPU remains available.
+
+Drop videos or folders into the window, review the selected tracks, choose
+a model and start. Finished SRTs appear beside each source video.
+Your videos and audio are processed on your PC, never uploaded.
+
+Keep _internal beside the executable. It contains app files, downloaded
+components, models, settings and logs. Logs are in _internal\.app-data\logs.
+Close the app before moving its folder. Moving after setup can require
+runtime repair and internet access; cached models are retained.
+
+For this preview, extract updates into a new folder; do not mix files from
+different versions. A new folder needs setup and model downloads again.
+To uninstall, close the app and delete its folder. SRTs saved beside videos
+elsewhere are not removed. Back up anything you intentionally put inside
+the app folder before deleting it.
+
+This preview executable is unsigned. Windows may show a security warning.
+Download only from the project's GitHub release and check its SHA-256 file.
+Do not disable Windows security protections.
+
+Third-party components are downloaded from Python.org, PyTorch, PyPI,
+Gyan's FFmpeg releases and Hugging Face. Their licenses apply separately.
+Downloaded Python and FFmpeg archives retain their license files.
+No Python, FFmpeg or model binaries are included in this ZIP.

@@ -11,8 +11,7 @@ internal static class Program
     [STAThread]
     private static void Main()
     {
-        // Developer launcher lives in <repository>/build/launcher, not a release package.
-        string root = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", ".."));
+        string root = ResolveRoot(AppDomain.CurrentDomain.BaseDirectory);
         string key;
         using(var hash=SHA256.Create()) key=BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(root.ToLowerInvariant()))).Replace("-", "");
         using(var instance=new Mutex(false, "Local\\EasyJapaneseSubtitles-"+key)) {
@@ -26,11 +25,32 @@ internal static class Program
         }
     }
 
+    internal static string ResolveRoot(string directory)
+    {
+#if PORTABLE_RELEASE
+        return Path.Combine(Path.GetFullPath(directory), "_internal");
+#else
+        return Path.GetFullPath(Path.Combine(directory, "..", ".."));
+#endif
+    }
+
+    internal static bool RuntimeMatches(string root)
+    {
+        string config = Path.Combine(root, ".runtime", "venv", "pyvenv.cfg");
+        if (!File.Exists(config)) return false;
+        string expected = Path.GetFullPath(Path.Combine(root, ".runtime", "python"));
+        foreach (string line in File.ReadAllLines(config)) {
+            if (line.StartsWith("home = ", StringComparison.OrdinalIgnoreCase))
+                return String.Equals(line.Substring(7).Trim().TrimEnd('\\'), expected.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
+        }
+        return false;
+    }
+
     private static void Run(string root)
     {
         string python = Path.Combine(root, ".runtime", "venv", "Scripts", "pythonw.exe");
         string tools=Path.Combine(root,".runtime","ffmpeg","ffmpeg-9.0.1-essentials_build","bin");
-        if (!File.Exists(python) || !File.Exists(Path.Combine(root,".runtime","ready.json")) ||
+        if (!RuntimeMatches(root) || !File.Exists(python) || !File.Exists(Path.Combine(root,".runtime","ready.json")) ||
             !File.Exists(Path.Combine(tools,"ffmpeg.exe")) || !File.Exists(Path.Combine(tools,"ffprobe.exe")))
         {
             Application.EnableVisualStyles();
@@ -75,7 +95,7 @@ internal static class Program
                 process.BeginErrorReadLine();
                 process.WaitForExit();
                 if (process.ExitCode != 0)
-                    MessageBox.Show("The app could not finish starting or closed unexpectedly.\n\nCheck that scripts\\setup-dev.ps1 completed and Microsoft Edge WebView2 Runtime is installed.\n\nDetails were saved to:\n" + logPath, "Easy Japanese Subtitles", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    MessageBox.Show("The app could not finish starting or closed unexpectedly.\n\nCheck that Microsoft Edge WebView2 Runtime is installed. The startup log has details.\n\nDetails were saved to:\n" + logPath, "Easy Japanese Subtitles", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
         catch (Exception error)
