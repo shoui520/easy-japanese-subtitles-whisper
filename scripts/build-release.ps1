@@ -28,7 +28,6 @@ New-Item -ItemType Directory -Path (Join-Path $internal 'scripts') -Force | Out-
 Copy-Item -LiteralPath (Join-Path $project 'scripts/setup-runtime.py') -Destination (Join-Path $internal 'scripts')
 Copy-Item -LiteralPath (Join-Path $project 'scripts/install-progress.py') -Destination (Join-Path $internal 'scripts')
 & (Join-Path $PSScriptRoot 'build-launcher.ps1') -OutputDirectory $stage -PortableRelease
-& (Join-Path $PSScriptRoot 'build-native.ps1') -OutputDirectory (Join-Path $internal 'native')
 & (Join-Path $PSScriptRoot 'test-release-security.ps1') -Path $stage
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [IO.Compression.ZipFile]::CreateFromDirectory($stage, $zip)

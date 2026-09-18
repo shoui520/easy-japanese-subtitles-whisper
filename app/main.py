@@ -76,7 +76,7 @@ def main():
             window = webview.create_window("Easy Japanese Subtitles", url, js_api=Bridge(), width=1150, height=840, min_size=(820, 600))
 
             def loaded():
-                from app.native_drop import attach
+                from app.file_drop import attach
                 try:
                     attach(window, queue)
                 except Exception:
