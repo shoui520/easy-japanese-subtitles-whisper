@@ -9,6 +9,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+import urllib.error
 import zipfile
 from contextlib import contextmanager
 
@@ -50,30 +51,54 @@ def digest(path):
 def download(url, target, sha, label):
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.exists():
-        if digest(target) != sha:
-            raise RuntimeError('A cached download failed verification: ' + target.name)
+        if digest(target) == sha:
+            report('Verified ' + label, 'Using the previously downloaded file', 1)
+            return
+        target.unlink()
+    partial = target.with_suffix(target.suffix + '.partial')
+    if partial.exists() and digest(partial) == sha:
+        partial.replace(target)
         report('Verified ' + label, 'Using the previously downloaded file', 1)
         return
-    partial = target.with_suffix(target.suffix + '.partial')
     report('Downloading ' + label, url)
     start = last = time.monotonic()
-    received = 0
-    with urllib.request.urlopen(url, timeout=60) as response, partial.open('wb') as output:
+    offset = partial.stat().st_size if partial.exists() else 0
+    request = urllib.request.Request(url, headers={'Range': f'bytes={offset}-'} if offset else {})
+    try:
+        response = urllib.request.urlopen(request, timeout=60)
+    except urllib.error.HTTPError as exc:
+        if exc.code != 416 or not offset:
+            raise
+        response = urllib.request.urlopen(url, timeout=60)
+        offset = 0
+    with response:
+        if getattr(response, 'status', 200) != 206:
+            offset = 0  # Server ignored Range: replace, never append a full response.
+        elif not response.headers.get('Content-Range', '').startswith(f'bytes {offset}-'):
+            raise RuntimeError('The download server returned an invalid resume range. Retry setup.')
+        received = offset
         total = int(response.headers.get('Content-Length', 0))
-        while chunk := response.read(256 * 1024):
-            output.write(chunk)
-            received += len(chunk)
-            now = time.monotonic()
-            if now - last >= .25 or received == total:
-                speed = received / max(now - start, .001)
-                detail = f'{received / 1048576:.1f} MB downloaded | {speed / 1048576:.1f} MB/s'
-                if total:
-                    seconds = max(0, round((total - received) / speed))
-                    detail = f'{received / 1048576:.1f} / {total / 1048576:.1f} MB ({received / total:.0%}) | {speed / 1048576:.1f} MB/s | about {seconds // 60}m {seconds % 60:02d}s left'
-                report('Downloading ' + label, detail, min(1, received / total) if total else None)
-                last = now
+        total = total + offset if total else 0
+        if offset:
+            report('Resuming ' + label, f'Continuing from {offset / 1048576:.1f} MB', offset / total if total else None)
+        with partial.open('ab' if offset else 'wb') as output:
+            while chunk := response.read(256 * 1024):
+                output.write(chunk)
+                received += len(chunk)
+                now = time.monotonic()
+                if now - last >= .25 or received == total:
+                    speed = (received - offset) / max(now - start, .001)
+                    detail = f'{received / 1048576:.1f} MB downloaded | {speed / 1048576:.1f} MB/s'
+                    if total:
+                        seconds = max(0, round((total - received) / speed))
+                        detail = f'{received / 1048576:.1f} / {total / 1048576:.1f} MB ({received / total:.0%}) | {speed / 1048576:.1f} MB/s | about {seconds // 60}m {seconds % 60:02d}s left'
+                    report('Downloading ' + label, detail, min(1, received / total) if total else None)
+                    last = now
+        if total and received < total:
+            raise RuntimeError('Download interrupted. Retry setup to continue from the saved progress.')
     report('Verifying ' + label, target.name)
     if digest(partial) != sha:
+        partial.unlink()
         raise RuntimeError('Download verification failed. Retry setup: ' + target.name)
     partial.replace(target)
 
@@ -131,9 +156,12 @@ def install(root, kind, temporary):
     tools = owned / 'ffmpeg/ffmpeg-9.0.1-essentials_build/bin'
     if not all((tools / name).is_file() for name in ('ffmpeg.exe', 'ffprobe.exe')):
         extract(archive, owned / 'ffmpeg')
-    report('Preparing environment', 'Creating the private Python environment')
-    run(base, '-m', 'venv', venv)
     python = venv / 'Scripts/python.exe'
+    if not python.is_file() or not (venv / 'pyvenv.cfg').is_file():
+        report('Preparing environment', 'Creating the private Python environment')
+        run(base, '-m', 'venv', venv)
+    else:
+        report('Resuming setup', 'Keeping your existing private Python environment')
     pip_wheel = owned / 'downloads/pip-25.3-py3-none-any.whl'
     download('https://files.pythonhosted.org/packages/44/3c/d717024885424591d5376220b5e836c2d5293ce2011523c9de23ff7bf068/pip-25.3-py3-none-any.whl',
              pip_wheel, '9655943313a94722b7774661c21049070f6bbb0a1516bf02f7c8d5d9201514cd', 'package installer')
@@ -141,7 +169,22 @@ def install(root, kind, temporary):
     run(python, '-m', 'pip', '--isolated', 'install', '--no-index', '--no-deps', pip_wheel)
 
     def packages(label, *args):
-        run(python, '-u', root / 'scripts/install-progress.py', label, 'install', '--no-cache-dir', *args)
+        # A successful phase is reusable only for the same inputs and environment.
+        # pip's private cache also retains completed downloads from a failed phase.
+        fingerprint = hashlib.sha256(json.dumps([str(a) for a in args]).encode())
+        fingerprint.update((root / 'requirements.txt').read_bytes())
+        fingerprint.update((root / settings['constraints']).read_bytes())
+        fingerprint.update(str(python.stat().st_mtime_ns).encode())
+        checkpoint = venv / ('.setup-' + label.replace(' ', '-') + '.json')
+        key = fingerprint.hexdigest()
+        if checkpoint.exists() and checkpoint.read_text() == key:
+            report('Already installed: ' + label, 'Keeping the completed setup step', 1)
+            return
+        run(python, '-u', root / 'scripts/install-progress.py', label, 'install',
+            '--cache-dir', owned / 'downloads/pip-cache', *args)
+        pending_checkpoint = checkpoint.with_suffix('.tmp')
+        pending_checkpoint.write_text(key)
+        pending_checkpoint.replace(checkpoint)
 
     if settings['sdk']:
         packages('AMD runtime libraries', *settings['sdk'], '--index-url', 'https://pypi.org/simple')
@@ -149,8 +192,14 @@ def install(root, kind, temporary):
     packages('application components', '-r', root / 'requirements.txt', '-c', root / settings['constraints'],
              'torch==' + settings['torch'], '--index-url', 'https://pypi.org/simple')
     report('Checking installation', 'Checking packages and processing device')
-    run(python, '-m', 'pip', 'check')
-    run(python, '-c', 'import torch,transformers,whisper,fastapi,uvicorn,webview; from transformers import AutoModelForSpeechSeq2Seq,AutoProcessor')
+    try:
+        run(python, '-m', 'pip', 'check')
+        run(python, '-c', 'import torch,transformers,whisper,fastapi,uvicorn,webview; from transformers import AutoModelForSpeechSeq2Seq,AutoProcessor')
+    except subprocess.CalledProcessError:
+        # A damaged/inconsistent environment must not be hidden by checkpoints.
+        for marker in venv.glob('.setup-*.json'):
+            marker.unlink()
+        raise
     run(python, '-m', 'app.setup_check', settings['device'])
     pending = ready.with_suffix('.tmp')
     pending.write_text(json.dumps(dict(python=settings['python'], torch=settings['torch'],

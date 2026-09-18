@@ -20,36 +20,69 @@ internal static class RuntimeBootstrap {
         string url="https://www.python.org/ftp/python/"+version+"/python-"+version+"-amd64.zip";
         Action<string,string,double?> emit=(stage,detail,fraction)=>report("SETUP "+new JavaScriptSerializer().Serialize(new { stage=stage,detail=detail,progress=fraction }));
         Directory.CreateDirectory(Path.GetDirectoryName(archive));
+        if(File.Exists(archive)) {
+            try { await Verify(archive,hash,cancel); }
+            catch(InvalidDataException) { File.Delete(archive); }
+        }
         if(!File.Exists(archive)) {
             emit("Downloading Python",url,0);
             ServicePointManager.SecurityProtocol=SecurityProtocolType.Tls12;
-            using(var client=new WebClient()) {
+            string partial=archive+".partial";
+            bool complete=false;
+            if(File.Exists(partial)) {
+                try { await Verify(partial,hash,cancel); complete=true; }
+                catch(InvalidDataException) { }
+            }
+            if(!complete) await Task.Run(()=>{
+                long offset=File.Exists(partial)?new FileInfo(partial).Length:0;
+                var request=(HttpWebRequest)WebRequest.Create(url);
+                if(offset>0)request.AddRange(offset);
+                using(cancel.Register(()=>request.Abort())) {
+                HttpWebResponse response;
+                try { response=(HttpWebResponse)request.GetResponse(); }
+                catch(WebException error) {
+                    var failed=error.Response as HttpWebResponse;
+                    if(failed==null || failed.StatusCode!=HttpStatusCode.RequestedRangeNotSatisfiable)throw;
+                    failed.Dispose();
+                    offset=0;
+                    request=(HttpWebRequest)WebRequest.Create(url);
+                    response=(HttpWebResponse)request.GetResponse();
+                }
+                using(response) {
+                if(response.StatusCode!=HttpStatusCode.PartialContent)offset=0;
+                else if(!(response.Headers["Content-Range"]??"").StartsWith("bytes "+offset+"-"))throw new InvalidDataException("Invalid download resume range");
+                long total=response.ContentLength>0?offset+response.ContentLength:0;
+                long received=offset;
+                if(offset>0)emit("Resuming Python",String.Format("Continuing from {0:F1} MB",offset/1048576.0),total>0?(double?)offset/total:null);
+                using(var input=response.GetResponseStream())
+                using(var output=new FileStream(partial,offset>0?FileMode.Append:FileMode.Create,FileAccess.Write)) {
                 var clock=Stopwatch.StartNew();
                 long lastReport=0;
-                long reportedBytes=-1;
-                object reportLock=new object();
-                client.DownloadProgressChanged+=(s,e)=>{
-                    lock(reportLock) {
-                    if(e.BytesReceived<reportedBytes)return;
-                    if(clock.ElapsedMilliseconds-lastReport<250 && e.BytesReceived!=e.TotalBytesToReceive)return;
+                byte[] buffer=new byte[262144];
+                int count;
+                while((count=input.Read(buffer,0,buffer.Length))>0) {
+                    cancel.ThrowIfCancellationRequested();
+                    output.Write(buffer,0,count);
+                    received+=count;
+                    if(clock.ElapsedMilliseconds-lastReport<250 && received!=total)continue;
                     lastReport=clock.ElapsedMilliseconds;
-                    reportedBytes=e.BytesReceived;
-                    double speed=e.BytesReceived/Math.Max(.001,clock.Elapsed.TotalSeconds);
-                    double? fraction=e.TotalBytesToReceive>0?(double?)((double)e.BytesReceived/e.TotalBytesToReceive):null;
-                    string detail=String.Format("{0:F1} / {1:F1} MB ({2:P0}) | {3:F1} MB/s",e.BytesReceived/1048576.0,e.TotalBytesToReceive/1048576.0,fraction??0,speed/1048576.0);
-                    if(e.TotalBytesToReceive>0 && speed>0) {
-                        var remaining=TimeSpan.FromSeconds(Math.Max(0,(e.TotalBytesToReceive-e.BytesReceived)/speed));
+                    double speed=(received-offset)/Math.Max(.001,clock.Elapsed.TotalSeconds);
+                    double? fraction=total>0?(double?)received/total:null;
+                    string detail=String.Format("{0:F1} / {1:F1} MB ({2:P0}) | {3:F1} MB/s",received/1048576.0,total/1048576.0,fraction??0,speed/1048576.0);
+                    if(total>0 && speed>0) {
+                        var remaining=TimeSpan.FromSeconds(Math.Max(0,(total-received)/speed));
                         detail+=String.Format(" | about {0}m {1:D2}s left",(int)remaining.TotalMinutes,remaining.Seconds);
                     }
                     emit("Downloading Python",detail,fraction);
-                    }
-                };
-                using(cancel.Register(()=>client.CancelAsync())) {
-                    await client.DownloadFileTaskAsync(new Uri(url),archive+".partial");
                 }
-            }
+                if(total>0 && received<total)throw new IOException("Download interrupted. Resume setup to keep downloading from the saved progress.");
+                }
+                }
+                }
+            },cancel);
             cancel.ThrowIfCancellationRequested();
-            await Verify(archive+".partial",hash,cancel);
+            try { await Verify(archive+".partial",hash,cancel); }
+            catch(InvalidDataException) { File.Delete(partial); throw; }
             File.Move(archive+".partial",archive);
         }
         emit("Verifying Python","Checking the downloaded runtime",null);
@@ -85,7 +118,7 @@ internal static class RuntimeBootstrap {
             cancel.ThrowIfCancellationRequested();
             using(var stream=File.OpenRead(file))using(var sha=SHA256.Create()) {
                 string actual=BitConverter.ToString(sha.ComputeHash(stream)).Replace("-","").ToLowerInvariant();
-                if(actual!=expected)throw new InvalidDataException("Python download failed verification. Remove the damaged download from .runtime/downloads and retry.");
+                if(actual!=expected)throw new InvalidDataException("Python download failed verification. Retry setup to download a verified copy.");
             }
         },cancel);
     }

@@ -134,14 +134,14 @@ internal sealed class SetupWindow : Form
         } catch(Exception error) {
             if(!IsDisposed) {
                 stage.Text=cancelled?"Setup cancelled":"Setup needs attention";
-                detail.Text=cancelled?"You can retry when ready. Verified downloads are kept.":error.Message;
+                detail.Text=cancelled?"Resume when ready. Downloaded files and completed installation steps are kept.":error.Message;
                 progress.Style=ProgressBarStyle.Continuous; progress.Value=0;
             }
         } finally {
             if(job!=null){job.Dispose();job=null;}
             if(cancellation!=null){cancellation.Dispose();cancellation=null;}
             running=false;
-            if(!IsDisposed){retry.Text="Retry";retry.Enabled=true;compute.Enabled=true;cancel.Text="Close";}
+            if(!IsDisposed){retry.Text="Resume";retry.Enabled=true;compute.Enabled=true;cancel.Text="Close";}
         }
     }
 }
