@@ -42,7 +42,6 @@ def main():
                 time.sleep(.25)
         else:
             import webview
-            from webview.dom import DOMEventHandler
 
             class Bridge:
                 def change_runtime(self):
@@ -76,20 +75,14 @@ def main():
 
             window = webview.create_window("Easy Japanese Subtitles", url, js_api=Bridge(), width=1150, height=840, min_size=(820, 600))
 
-            def drop(event):
-                paths = [f.get("pywebviewFullPath") for f in event.get("dataTransfer", {}).get("files", [])]
-                paths = [p for p in paths if p]
-                try:
-                    if paths:
-                        queue.add(paths)
-                    else:
-                        raise ValueError("Windows did not provide file paths. Use Add files or Add folder.")
-                except Exception as exc:
-                    window.evaluate_js(f"showError({json.dumps(str(exc))})")
-
             def loaded():
-                window.dom.document.events.dragover += DOMEventHandler(lambda e: None, True, True, debounce=300)
-                window.dom.document.events.drop += DOMEventHandler(drop, True, True)
+                from app.native_drop import attach
+                try:
+                    attach(window, queue)
+                except Exception:
+                    import traceback
+                    traceback.print_exc()
+                    window.evaluate_js('showError("Drag and drop could not start. Use Add files or Add folder.")')
 
             window.events.loaded += loaded
             webview.start(gui="edgechromium", private_mode=True)

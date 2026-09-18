@@ -51,6 +51,7 @@ def test_built_zip_extracted_backend_with_clean_path(tmp_path):
         assert 'Read me.txt' not in names
         assert '_internal/app/ui/index.html' in names
         assert '_internal/scripts/setup-runtime.py' in names
+        assert '_internal/native/EasySubs.Native.dll' in names
         assert not any(name.endswith('.ps1') for name in names)
         assert '_internal/constraints-windows-py312.txt' in names
         assert all(name.startswith('_internal/') or name == 'Easy Japanese Subtitles.exe' for name in names)
