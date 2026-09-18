@@ -204,6 +204,7 @@ $('addFiles').onclick=()=>action(()=>nativePick('pick_files'));$('addFolder').on
 $('start').onclick=()=>action(()=>api('start',{}));$('stop').onclick=()=>action(()=>api('cancel',{}));$('clear').onclick=()=>action(()=>api('remove',{ids:state.items.filter(i=>!['processing','inspecting'].includes(i.status)).map(i=>i.id)}));
 $('model').onchange=()=>action(()=>api('settings',{model:$('model').value}));$('recursive').onchange=()=>action(()=>api('settings',{recursive:$('recursive').checked}));
 $('setupButton').onclick=()=>{for(const k of ['python','ffmpeg','ffprobe','device'])$(k).value=state.settings[k];$('setup').showModal();};
+$('changeRuntime').onclick=()=>action(async()=>{if(!window.pywebview)throw Error('Open the desktop app to change its runtime.');await window.pywebview.api.change_runtime();});
 $('saveSetup').onclick=()=>action(async()=>{await api('settings',Object.fromEntries(['python','ffmpeg','ffprobe','device'].map(k=>[k,$(k).value])));$('setup').close();await checkRequirements();});
 async function checkRequirements(){
  $('runtimeStatus').textContent='Checking the local transcription engine…';

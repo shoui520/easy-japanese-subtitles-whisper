@@ -1,0 +1,9 @@
+# AMD native Windows ROCm requires Python 3.12. Keep its torch build intact.
+torch==2.9.1+rocm7.2.1
+transformers==4.57.6
+huggingface_hub==0.36.2
+tokenizers==0.22.2
+openai-whisper==20250625
+numpy==2.2.6
+numba==0.61.2
+llvmlite==0.44.0

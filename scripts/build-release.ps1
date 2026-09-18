@@ -12,7 +12,7 @@ if ((Test-Path -LiteralPath $stage) -or (Test-Path -LiteralPath $zip)) {
 $internal = Join-Path $stage '_internal'
 New-Item -ItemType Directory -Path $internal -Force | Out-Null
 # Explicit allowlist: never copy environments, credentials, caches, logs or user media.
-foreach ($file in @('anime_subs.py','requirements.txt','constraints-windows-py314.txt')) {
+foreach ($file in @('anime_subs.py','requirements.txt','constraints-windows-py314.txt','constraints-windows-py312.txt')) {
     Copy-Item -LiteralPath (Join-Path $project $file) -Destination $internal
 }
 $appRoot = Join-Path $project 'app'
@@ -27,6 +27,7 @@ Get-ChildItem -LiteralPath $appRoot -Recurse -File | Where-Object {
 New-Item -ItemType Directory -Path (Join-Path $internal 'scripts') -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $project 'scripts/setup-private-runtime.ps1') -Destination (Join-Path $internal 'scripts')
 Copy-Item -LiteralPath (Join-Path $project 'scripts/install-progress.py') -Destination (Join-Path $internal 'scripts')
+Copy-Item -LiteralPath (Join-Path $project 'scripts/runtime-profiles.ps1') -Destination (Join-Path $internal 'scripts')
 & (Join-Path $PSScriptRoot 'build-launcher.ps1') -OutputDirectory $stage -PortableRelease
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [IO.Compression.ZipFile]::CreateFromDirectory($stage, $zip)

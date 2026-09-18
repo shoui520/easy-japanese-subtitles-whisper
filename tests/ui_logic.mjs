@@ -27,6 +27,10 @@ export async function verify(project) {
     fetch:async()=>({ok:true,json:async()=>({text:log})})});
   // Suppress startup network checks; exercise functions against controlled data.
   vm.runInContext(source.replace('refresh();action(checkRequirements);setInterval(refresh,1200);',''),context);
+  let runtimeChangeRequested=false;
+  context.window.pywebview={api:{change_runtime:async()=>{runtimeChangeRequested=true;}}};
+  await node('changeRuntime').onclick();
+  assert.equal(runtimeChangeRequested,true);
   const flatten=element=>element.textContent+' '+element.children.map(flatten).join(' ');
   context.fixture={items:[{id:'a',name:'Episode 01.mkv',source:'C:/A/Episode 01.mkv',group:'C:/A',output:'C:/A/Episode 01.anime.ja.srt',status:'processing',stage:'Transcribing',phase:5,progress:.5,detail:'Dialogue section 4 of 8',processed_seconds:120,total_seconds:240,eta_seconds:30,started_at:Date.now()/1000-30},
     {id:'b',name:'Episode 01.mkv',source:'C:/B/Episode 01.mkv',group:'C:/B',output:'C:/B/Episode 01.anime.ja.srt',status:'complete',stage:'Complete',cues:10}],

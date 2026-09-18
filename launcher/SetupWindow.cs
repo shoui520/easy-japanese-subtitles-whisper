@@ -15,6 +15,8 @@ internal sealed class SetupWindow : Form
     private readonly Button retry = new Button(), cancel = new Button(), logButton = new Button();
     private readonly ComboBox compute = new ComboBox();
     private bool running, cancelled;
+    private string setupError;
+    internal static readonly string[] Profiles = {"cu128", "xpu", "rocm", "cpu"};
     private ProcessJob job;
     private readonly object logLock = new object();
 
@@ -35,7 +37,22 @@ internal sealed class SetupWindow : Form
         detail.Text = "Required components will be downloaded into the app folder. This window closes when setup finishes.";
         progress.SetBounds(24,175,520,18); progress.Style = ProgressBarStyle.Continuous;
         compute.SetBounds(24,215,290,32); compute.DropDownStyle = ComboBoxStyle.DropDownList;
-        compute.Items.AddRange(new object[]{"CUDA runtime (NVIDIA)", "CPU runtime"}); compute.SelectedIndex = 0;
+        compute.Items.AddRange(new object[]{"CUDA (NVIDIA)", "XPU (Intel)", "ROCm / HIP (AMD)", "CPU"}); compute.SelectedIndex = 0;
+        compute.SelectedIndexChanged += (s,e) => {
+            if(!running) detail.Text = compute.SelectedIndex==2
+                ? "AMD ROCm 7.2.1 requires Windows 11, a supported Radeon/Ryzen GPU and AMD's compatible driver (26.2.2). Setup installs its own Python 3.12 and AMD libraries."
+                : compute.SelectedIndex==1
+                ? "Intel XPU requires a supported Intel Arc/Core Ultra GPU and an up-to-date Intel graphics driver. Setup downloads the matching runtime; no separate toolkit is needed."
+                : "Required components will be downloaded into the app folder. This window closes when setup finishes.";
+        };
+        try {
+            var ready=new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(File.ReadAllText(Path.Combine(root,".runtime","ready.json")));
+            object selected;
+            if(ready.TryGetValue("compute",out selected)) {
+                int index=Array.IndexOf(Profiles,Convert.ToString(selected));
+                if(index>=0)compute.SelectedIndex=index;
+            }
+        } catch(IOException) {} catch(ArgumentException) {}
         retry.SetBounds(324,215,105,32); retry.Text = "Set up";
         cancel.SetBounds(439,215,105,32); cancel.Text = "Close";
         logButton.SetBounds(24,265,150,32); logButton.Text = "View setup log";
@@ -52,6 +69,7 @@ internal sealed class SetupWindow : Form
         if (!line.StartsWith("SETUP ") || IsDisposed) return;
         try {
             var data = new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(line.Substring(6));
+            if(data.ContainsKey("error")) setupError=Convert.ToString(data["error"]);
             BeginInvoke((Action)(() => {
                 if (IsDisposed || !running) return;
                 stage.Text = Convert.ToString(data["stage"]);
@@ -67,14 +85,14 @@ internal sealed class SetupWindow : Form
 
     private async Task Install() {
         if (running) return;
-        running=true; cancelled=false; retry.Enabled=false; compute.Enabled=false; cancel.Text="Cancel";
+        running=true; cancelled=false; setupError=null; retry.Enabled=false; compute.Enabled=false; cancel.Text="Cancel";
         stage.Text="Preparing your app"; detail.Text="Checking and downloading required components";
         progress.Style=ProgressBarStyle.Marquee;
         try {
             string powershell=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
             string script=Path.Combine(root,"scripts","setup-private-runtime.ps1");
             using(var process=new Process()) {
-                process.StartInfo=new ProcessStartInfo(powershell,"-NoProfile -ExecutionPolicy Bypass -File \""+script+"\" -Resume -WaitForStart -Compute "+(compute.SelectedIndex==0?"cu128":"cpu")) {
+                process.StartInfo=new ProcessStartInfo(powershell,"-NoProfile -ExecutionPolicy Bypass -File \""+script+"\" -Resume -WaitForStart -Compute "+Profiles[compute.SelectedIndex]) {
                     WorkingDirectory=root, UseShellExecute=false, CreateNoWindow=true,
                     RedirectStandardInput=true, RedirectStandardOutput=true, RedirectStandardError=true
                 };
@@ -88,7 +106,7 @@ internal sealed class SetupWindow : Form
                 await Task.Run(()=>process.WaitForExit());
                 if(cancelled)throw new OperationCanceledException();
                 if(process.ExitCode!=0 || !File.Exists(Path.Combine(root,".runtime","ready.json")))
-                    throw new InvalidOperationException("Setup could not finish. Check your connection and free disk space, then retry. The setup log has details.");
+                    throw new InvalidOperationException(setupError ?? "Setup could not finish. Check your connection and free disk space, then retry. The setup log has details.");
             }
             running=false;
             if(!IsDisposed) { DialogResult=DialogResult.OK; Close(); }

@@ -21,7 +21,14 @@ def executable(name, override=""):
 
 
 def default_python():
-    local = PRIVATE / "venv" / "Scripts" / "python.exe"
+    runtime = PRIVATE
+    try:
+        ready = json.loads((PRIVATE / 'ready.json').read_text(encoding='utf-8-sig'))
+        if ready.get('profile') in {'cpu', 'cu128', 'xpu', 'rocm'}:
+            runtime = PRIVATE / 'profiles' / ready['profile']
+    except (OSError, ValueError):
+        pass
+    local = runtime / "venv" / "Scripts" / "python.exe"
     return str(local) if local.is_file() and (PRIVATE / "ready.json").is_file() else sys.executable
 
 

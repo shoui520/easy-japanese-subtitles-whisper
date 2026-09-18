@@ -10,6 +10,14 @@ internal static class ReleaseLayoutSmoke {
         File.WriteAllText(Path.Combine(venv,"pyvenv.cfg"),"home = C:\\old location\\python\n");
         if(Program.RuntimeMatches(root))return 3;
         File.WriteAllText(Path.Combine(venv,"pyvenv.cfg"),"home = "+Path.Combine(root,".runtime","python")+"\n");
-        return Program.RuntimeMatches(root)?0:4;
+        if(!Program.RuntimeMatches(root))return 4;
+        foreach(string profile in SetupWindow.Profiles) {
+            File.WriteAllText(Path.Combine(root,".runtime","ready.json"),"{\"profile\":\""+profile+"\"}");
+            string selected=Path.Combine(root,".runtime","profiles",profile);
+            Directory.CreateDirectory(Path.Combine(selected,"venv"));
+            File.WriteAllText(Path.Combine(selected,"venv","pyvenv.cfg"),"home = "+Path.Combine(selected,"python")+"\n");
+            if(Program.RuntimeDirectory(root)!=selected || !Program.RuntimeMatches(root))return 5;
+        }
+        return 0;
     }
 }

@@ -23,6 +23,7 @@ def main():
     parser.add_argument("paths", nargs="*")
     args = parser.parse_args()
     queue = Queue(args.data_dir, args.output_dir, args.protect_root)
+    change_runtime = False
     token = secrets.token_urlsafe(32)
     import uvicorn
     sock = socket.socket()
@@ -44,6 +45,17 @@ def main():
             from webview.dom import DOMEventHandler
 
             class Bridge:
+                def change_runtime(self):
+                    nonlocal change_runtime
+                    import os
+                    if os.environ.get('EASY_SUBS_LAUNCHER') != '1':
+                        raise ValueError('Open Easy Japanese Subtitles.exe to install or change the runtime.')
+                    with queue.lock:
+                        if queue.running:
+                            raise ValueError('Finish or cancel the current queue before changing the runtime.')
+                        change_runtime = True
+                    window.destroy()
+
                 def open_output_folder(self, item_id):
                     import os
                     from pathlib import Path
@@ -86,6 +98,8 @@ def main():
         server.should_exit = True
         thread.join(timeout=5)
         sock.close()
+    if change_runtime:
+        raise SystemExit(42)
 
 
 if __name__ == "__main__":

@@ -74,7 +74,8 @@ def test_native_installer_job_kills_children(tmp_path):
 
 @pytest.mark.skipif(os.name != 'nt', reason='WinForms setup dialog')
 @pytest.mark.parametrize('fail', [False, True])
-def test_native_setup_window_autocloses_only_on_success(tmp_path, fail):
+@pytest.mark.parametrize('profile', ['cu128', 'cpu', 'xpu', 'rocm'])
+def test_native_setup_window_autocloses_only_on_success(tmp_path, fail, profile):
     compiler = Path(os.environ['SystemRoot'])/'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
     if not compiler.exists(): pytest.skip('Windows .NET Framework compiler unavailable')
     script_dir = tmp_path/'scripts'; script_dir.mkdir()
@@ -84,7 +85,7 @@ def test_native_setup_window_autocloses_only_on_success(tmp_path, fail):
         '/reference:System.Windows.Forms.dll', '/reference:System.Drawing.dll', '/reference:System.Web.Extensions.dll',
         str(ROOT/'launcher/ProcessJob.cs'), str(ROOT/'launcher/SetupWindow.cs'),
         str(ROOT/'tests/SetupWindowSmoke.cs')], check=True, capture_output=True)
-    result = subprocess.run([str(output), str(tmp_path), 'fail' if fail else 'success'],
-        env=dict(os.environ, SETUP_TEST_FAIL='1' if fail else '0'),
-        capture_output=True, text=True, timeout=20, creationflags=subprocess.CREATE_NO_WINDOW)
+    result = subprocess.run([str(output), str(tmp_path), 'fail' if fail else 'success', profile],
+        env=dict(os.environ, SETUP_TEST_FAIL='1' if fail else '0', SETUP_EXPECTED_PROFILE=profile),
+        capture_output=True, text=True, timeout=60, creationflags=subprocess.CREATE_NO_WINDOW)
     assert result.returncode == 0, result.stdout + result.stderr

@@ -5,6 +5,8 @@ using System.Windows.Forms;
 using System.Threading;
 using System.Security.Cryptography;
 using System.Text;
+using System.Collections.Generic;
+using System.Web.Script.Serialization;
 
 internal static class Program
 {
@@ -36,9 +38,10 @@ internal static class Program
 
     internal static bool RuntimeMatches(string root)
     {
-        string config = Path.Combine(root, ".runtime", "venv", "pyvenv.cfg");
+        string runtime = RuntimeDirectory(root);
+        string config = Path.Combine(runtime, "venv", "pyvenv.cfg");
         if (!File.Exists(config)) return false;
-        string expected = Path.GetFullPath(Path.Combine(root, ".runtime", "python"));
+        string expected = Path.GetFullPath(Path.Combine(runtime, "python"));
         foreach (string line in File.ReadAllLines(config)) {
             if (line.StartsWith("home = ", StringComparison.OrdinalIgnoreCase))
                 return String.Equals(line.Substring(7).Trim().TrimEnd('\\'), expected.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
@@ -46,9 +49,23 @@ internal static class Program
         return false;
     }
 
+    internal static string RuntimeDirectory(string root) {
+        string runtime=Path.Combine(root,".runtime");
+        try {
+            var ready=new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(File.ReadAllText(Path.Combine(runtime,"ready.json")));
+            object value;
+            if(ready.TryGetValue("profile",out value)) {
+                string profile=Convert.ToString(value);
+                if(Array.IndexOf(SetupWindow.Profiles,profile)>=0) return Path.Combine(runtime,"profiles",profile);
+                throw new InvalidDataException("Unknown runtime profile.");
+            }
+        } catch(FileNotFoundException) {} catch(DirectoryNotFoundException) {}
+        return runtime;
+    }
+
     private static void Run(string root)
     {
-        string python = Path.Combine(root, ".runtime", "venv", "Scripts", "pythonw.exe");
+        string python = Path.Combine(RuntimeDirectory(root), "venv", "Scripts", "pythonw.exe");
         string tools=Path.Combine(root,".runtime","ffmpeg","ffmpeg-9.0.1-essentials_build","bin");
         if (!RuntimeMatches(root) || !File.Exists(python) || !File.Exists(Path.Combine(root,".runtime","ready.json")) ||
             !File.Exists(Path.Combine(tools,"ffmpeg.exe")) || !File.Exists(Path.Combine(tools,"ffprobe.exe")))
@@ -57,7 +74,7 @@ internal static class Program
             using(var setup = new SetupWindow(root)) {
                 if(setup.ShowDialog()!=DialogResult.OK) return;
             }
-            python=Path.Combine(root,".runtime","venv","Scripts","pythonw.exe");
+            python=Path.Combine(RuntimeDirectory(root),"venv","Scripts","pythonw.exe");
         }
         try
         {
@@ -77,6 +94,7 @@ internal static class Program
                     RedirectStandardError = true
                 };
                 process.StartInfo.EnvironmentVariables["PYTHONUTF8"] = "1";
+                process.StartInfo.EnvironmentVariables["EASY_SUBS_LAUNCHER"] = "1";
                 process.StartInfo.EnvironmentVariables["PYTHONNOUSERSITE"] = "1";
                 process.StartInfo.EnvironmentVariables.Remove("PYTHONHOME");
                 process.StartInfo.EnvironmentVariables.Remove("PYTHONPATH");
@@ -94,6 +112,14 @@ internal static class Program
                 process.BeginOutputReadLine();
                 process.BeginErrorReadLine();
                 process.WaitForExit();
+                if (process.ExitCode == 42) {
+                    Application.EnableVisualStyles();
+                    using(var setup=new SetupWindow(root)) {
+                        if(setup.ShowDialog()!=DialogResult.OK && !File.Exists(Path.Combine(root,".runtime","ready.json")))return;
+                    }
+                    Run(root);
+                    return;
+                }
                 if (process.ExitCode != 0)
                     MessageBox.Show("The app could not finish starting or closed unexpectedly.\n\nCheck that Microsoft Edge WebView2 Runtime is installed. The startup log has details.\n\nDetails were saved to:\n" + logPath, "Easy Japanese Subtitles", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }

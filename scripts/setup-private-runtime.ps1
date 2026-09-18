@@ -1,5 +1,5 @@
 #Requires -Version 5.1
-param([ValidateSet('cpu','cu128')][string]$Compute = 'cu128', [switch]$Resume, [switch]$WaitForStart)
+param([ValidateSet('cpu','cu128','xpu','rocm')][string]$Compute = 'cu128', [switch]$Resume, [switch]$WaitForStart)
 if ($WaitForStart -and [Console]::ReadLine() -ne 'GO') { exit 1 }
 $ErrorActionPreference = 'Stop'
 $env:PSModulePath = "$PSHOME\Modules"
@@ -7,10 +7,13 @@ $ProgressPreference = 'SilentlyContinue'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
 $project = Split-Path -Parent $PSScriptRoot
+. (Join-Path $PSScriptRoot 'runtime-profiles.ps1')
+$profile = Get-RuntimeProfile $Compute
 $owned = Join-Path $project '.runtime'
 $downloads = Join-Path $owned 'downloads'
-$base = Join-Path $owned 'python'
-$venv = Join-Path $owned 'venv'
+$profileRoot = Join-Path $owned "profiles/$Compute"
+$base = Join-Path $profileRoot 'python'
+$venv = Join-Path $profileRoot 'venv'
 $ownedPrefix = [IO.Path]::GetFullPath($owned).TrimEnd('\') + '\'
 $activeRuntime = @(Get-CimInstance Win32_Process -Filter "Name = 'python.exe' OR Name = 'pythonw.exe'" | Where-Object {
     $_.ExecutablePath -and $_.ExecutablePath.StartsWith($ownedPrefix, [StringComparison]::OrdinalIgnoreCase)
@@ -49,13 +52,14 @@ if ((Test-Path -LiteralPath $venv) -and (-not $Resume -or (-not (Test-Path -Lite
     throw 'An existing runtime cannot be replaced automatically. See the setup log.'
 }
 if (-not (Test-Path -LiteralPath $ownership)) { 'easy-japanese-subtitles-private-runtime-v1' | Set-Content -LiteralPath $ownership -Encoding ASCII }
-if ($legacyOwned) {
-    # Do not advertise a usable runtime if a repair is cancelled halfway through.
+# Invalidate only the profile being repaired; preserve another working profile.
+if ((Test-Path -LiteralPath (Join-Path $owned 'ready.json')) -and $ready.profile -eq $Compute) {
     Remove-Item -LiteralPath (Join-Path $owned 'ready.json') -ErrorAction Stop
 }
 function Fetch-Verified($Url, $Destination, $Sha256) {
     $label = 'Python runtime'
     if ([IO.Path]::GetFileName($Destination).StartsWith('ffmpeg')) { $label = 'media tools' }
+    if ([IO.Path]::GetFileName($Destination).StartsWith('pip-')) { $label = 'package installer' }
     if (-not (Test-Path -LiteralPath $Destination)) {
         Write-Host "Downloading $Url"
         $request = [Net.HttpWebRequest]::Create($Url)
@@ -97,13 +101,13 @@ function Fetch-Verified($Url, $Destination, $Sha256) {
     }
     if ((Get-FileHash -LiteralPath $Destination -Algorithm SHA256).Hash -ne $Sha256) { throw "Cached download checksum failed: $Destination" }
 }
-$pythonZip = Join-Path $downloads 'python/pythoncore-3.14-64-3.14.3.zip'
+$pythonZip = Join-Path $downloads "python/python-$($profile.Python)-amd64.zip"
 Report-Setup 'Preparing Python' 'Downloading the application runtime if needed'
 New-Item -ItemType Directory -Path (Split-Path -Parent $pythonZip) -Force | Out-Null
-Fetch-Verified 'https://www.python.org/ftp/python/3.14.3/python-3.14.3-amd64.zip' $pythonZip 'ec781bb03f9638d136b24da7c83b4db1652ce767848aa856a30bb87cfdb1abe4'
+Fetch-Verified $profile.PythonUrl $pythonZip $profile.PythonHash
 Report-Setup 'Preparing Python' 'Unpacking the application runtime'
-$missingPython = @('python.exe','pythonw.exe','python314.dll','Lib/venv/__init__.py') | Where-Object { -not (Test-Path -LiteralPath (Join-Path $base $_)) }
-if (-not $legacyOwned -or $missingPython) {
+$missingPython = @('python.exe','pythonw.exe',$profile.Dll,'Lib/venv/__init__.py') | Where-Object { -not (Test-Path -LiteralPath (Join-Path $base $_)) }
+if ($missingPython) {
     Expand-OwnedArchive $pythonZip $base
 }
 $ffmpegZip = Join-Path $downloads 'ffmpeg-9.0.1-essentials.zip'
@@ -113,7 +117,7 @@ Fetch-Verified 'https://github.com/GyanD/codexffmpeg/releases/download/9.0.1/ffm
 $ffmpeg = Join-Path $owned 'ffmpeg'
 Report-Setup 'Preparing media tools' 'Unpacking FFmpeg and FFprobe'
 $missingTools = @('ffmpeg.exe','ffprobe.exe') | Where-Object { -not (Test-Path -LiteralPath (Join-Path $ffmpeg "ffmpeg-9.0.1-essentials_build/bin/$_")) }
-if (-not $legacyOwned -or $missingTools) {
+if ($missingTools) {
     Expand-OwnedArchive $ffmpegZip $ffmpeg
 }
 # Only this script process and its children get the isolated environment.
@@ -132,16 +136,37 @@ Report-Setup 'Preparing environment' 'Creating the private Python environment'
 if ($LASTEXITCODE -ne 0) { throw 'Could not create the private venv.' }
 $python = Join-Path $venv 'Scripts/python.exe'
 Report-Setup 'Preparing transcription engine' 'Checking which components need downloading'
-& $python -u (Join-Path $PSScriptRoot 'install-progress.py') 'transcription engine' install --no-cache-dir "torch==2.11.0+$Compute" --index-url "https://download.pytorch.org/whl/$Compute"
+# Python 3.12 ships an older pip without raw progress. Download the pinned wheel
+# with byte progress before installing it offline, then use the tested adapter.
+Report-Setup 'Preparing installer' 'Updating the package installer'
+$pipVersion = & $python -c 'import pip; print(pip.__version__)'
+if ($pipVersion -ne '25.3') {
+    $pipWheel = Join-Path $downloads 'pip-25.3-py3-none-any.whl'
+    Fetch-Verified 'https://files.pythonhosted.org/packages/44/3c/d717024885424591d5376220b5e836c2d5293ce2011523c9de23ff7bf068/pip-25.3-py3-none-any.whl' $pipWheel '9655943313a94722b7774661c21049070f6bbb0a1516bf02f7c8d5d9201514cd'
+    Report-Setup 'Preparing installer' 'Installing the downloaded package installer'
+    & $python -m pip --isolated install --no-index --no-deps $pipWheel
+    if ($LASTEXITCODE -ne 0) { throw 'Could not prepare the package installer.' }
+}
+if ($profile.Sdk.Count) {
+    & $python -u (Join-Path $PSScriptRoot 'install-progress.py') 'AMD runtime libraries' install --no-cache-dir @($profile.Sdk) --index-url https://pypi.org/simple
+    if ($LASTEXITCODE -ne 0) { throw 'AMD runtime library installation failed.' }
+}
+& $python -u (Join-Path $PSScriptRoot 'install-progress.py') 'transcription engine' install --no-cache-dir $profile.TorchRequirement --index-url $profile.Index
 if ($LASTEXITCODE -ne 0) { throw 'Private PyTorch installation failed.' }
 Report-Setup 'Installing application components' 'Downloading and installing required packages'
-& $python -u (Join-Path $PSScriptRoot 'install-progress.py') 'application components' install --no-cache-dir -r (Join-Path $project 'requirements.txt') -c (Join-Path $project 'constraints-windows-py314.txt') --index-url https://pypi.org/simple
+& $python -u (Join-Path $PSScriptRoot 'install-progress.py') 'application components' install --no-cache-dir -r (Join-Path $project 'requirements.txt') -c (Join-Path $project $profile.Constraints) "torch==$($profile.Torch)" --index-url https://pypi.org/simple
 if ($LASTEXITCODE -ne 0) { throw 'Private package installation failed.' }
 Report-Setup 'Checking installation' 'Checking that the components work together'
 & $python -m pip check
 if ($LASTEXITCODE -ne 0) { throw 'Private dependency check failed.' }
 & $python -c 'import torch,transformers,whisper,fastapi,uvicorn,webview; from transformers import AutoModelForSpeechSeq2Seq,AutoProcessor'
 if ($LASTEXITCODE -ne 0) { throw 'The installed engine could not load. See the setup log.' }
-@{ python = '3.14.3'; torch = '2.11.0'; compute = $Compute; ffmpeg = '9.0.1'; powershell = $PSVersionTable.PSVersion.ToString() } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $owned 'ready.json') -Encoding UTF8
+Report-Setup 'Checking processing device' 'Testing the selected runtime on your PC'
+Push-Location -LiteralPath $project
+try {
+    & $python -m app.setup_check $profile.Device
+    if ($LASTEXITCODE -ne 0) { throw 'The selected processing device could not run. Choose a compatible runtime or CPU.' }
+} finally { Pop-Location }
+@{ python = $profile.Python; torch = $profile.Torch; compute = $Compute; profile = $Compute; ffmpeg = '9.0.1'; powershell = $PSVersionTable.PSVersion.ToString() } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $owned 'ready.json') -Encoding UTF8
 Write-Host "Private runtime prepared at $owned. No system Python, PATH, or FFmpeg installation was changed."
 Report-Setup 'Complete' 'Setup finished' 1

@@ -48,7 +48,17 @@ class Queue:
                 if saved.get("app_root"):
                     old_private = Path(saved["app_root"]) / ".runtime" / "venv" / "Scripts"
                     if Path(self.settings["python"]) in {old_private / "python.exe", old_private / "pythonw.exe"}:
+                        changed = Path(self.settings['python']) != Path(default_python())
                         self.settings["python"] = default_python()
+                        if changed:
+                            self.settings['device'] = 'auto'
+                    for profile in ('cpu', 'cu128', 'xpu', 'rocm'):
+                        old_profile = Path(saved['app_root']) / '.runtime' / 'profiles' / profile / 'venv' / 'Scripts'
+                        if Path(self.settings['python']) in {old_profile / 'python.exe', old_profile / 'pythonw.exe'}:
+                            changed = Path(self.settings['python']) != Path(default_python())
+                            self.settings['python'] = default_python()
+                            if changed:
+                                self.settings['device'] = 'auto'
                 if Path(self.settings["python"]).resolve() in {
                     ROOT / ".venv" / "Scripts" / "python.exe",
                     ROOT / ".venv" / "Scripts" / "pythonw.exe",

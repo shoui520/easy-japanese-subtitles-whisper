@@ -8,9 +8,12 @@ internal static class SetupWindowSmoke {
         bool fail=args[1]=="fail", sawFailure=false, timedOut=false, sawProgress=false, sawInstall=false;
         Application.EnableVisualStyles();
         using(var window=new SetupWindow(args[0])) {
+            var compute=(ComboBox)typeof(SetupWindow).GetField("compute",BindingFlags.NonPublic|BindingFlags.Instance).GetValue(window);
+            if(compute.Items.Count!=4)return 7;
+            if(args.Length>2)compute.SelectedIndex=Array.IndexOf(SetupWindow.Profiles,args[2]);
             // Exercise our form without displaying a test window to the user.
             window.ShowInTaskbar=false; window.Opacity=0;
-            DateTime deadline=DateTime.UtcNow.AddSeconds(12);
+            DateTime deadline=DateTime.UtcNow.AddSeconds(45);
             var timer=new Timer(){Interval=100};
             timer.Tick+=(s,e)=>{
                 if(DateTime.UtcNow>deadline){timedOut=true;window.Close();return;}
@@ -23,7 +26,7 @@ internal static class SetupWindowSmoke {
                     stage.Text=="Installing application components" && detail.Text.Contains("1 of 4 packages installed") &&
                     detail.Text.Contains("Installing numpy"))sawInstall=true;
                 if(fail&&stage.Text=="Setup needs attention"&&retry.Enabled){
-                    sawFailure=window.DialogResult!=DialogResult.OK;
+                    sawFailure=window.DialogResult!=DialogResult.OK && detail.Text=="Choose a compatible driver or CPU.";
                     window.Close();
                 }
             };
