@@ -1,6 +1,13 @@
 # Easy Japanese Subtitles
 
 Drop videos or folders to generate Japanese .srt subtitle files on your PC.
+<p align="center">
+  <img
+    src="https://github.com/user-attachments/assets/f76c50a3-6c30-45ad-a5af-e90f39764cfa"
+    alt="Easy Japanese Subtitles application"
+    width="720"
+  />
+</p>
 
 ## Download
 
