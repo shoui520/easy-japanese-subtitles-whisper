@@ -79,13 +79,15 @@ def test_native_setup_window_autocloses_only_on_success(tmp_path, fail, profile)
     compiler = Path(os.environ['SystemRoot'])/'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
     if not compiler.exists(): pytest.skip('Windows .NET Framework compiler unavailable')
     script_dir = tmp_path/'scripts'; script_dir.mkdir()
-    shutil.copyfile(ROOT/'tests/fixtures/setup-progress.ps1', script_dir/'setup-private-runtime.ps1')
+    shutil.copyfile(ROOT/'tests/fixtures/setup-progress.py', script_dir/'setup-runtime.py')
     output = tmp_path/'setup-window-smoke.exe'
     subprocess.run([str(compiler), '/nologo', '/target:exe', '/out:'+str(output),
         '/reference:System.Windows.Forms.dll', '/reference:System.Drawing.dll', '/reference:System.Web.Extensions.dll',
+        '/reference:System.IO.Compression.dll', '/reference:System.IO.Compression.FileSystem.dll',
+        str(ROOT/'launcher/RuntimeBootstrap.cs'),
         str(ROOT/'launcher/ProcessJob.cs'), str(ROOT/'launcher/SetupWindow.cs'),
         str(ROOT/'tests/SetupWindowSmoke.cs')], check=True, capture_output=True)
-    result = subprocess.run([str(output), str(tmp_path), 'fail' if fail else 'success', profile],
+    result = subprocess.run([str(output), str(tmp_path), 'fail' if fail else 'success', profile, sys.executable],
         env=dict(os.environ, SETUP_TEST_FAIL='1' if fail else '0', SETUP_EXPECTED_PROFILE=profile),
         capture_output=True, text=True, timeout=60, creationflags=subprocess.CREATE_NO_WINDOW)
     assert result.returncode == 0, result.stdout + result.stderr

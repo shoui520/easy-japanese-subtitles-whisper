@@ -20,7 +20,8 @@ def test_portable_launcher_resolves_root_and_detects_moved_runtime(tmp_path):
                     '/main:ReleaseLayoutSmoke', '/out:' + str(output),
                     '/reference:System.Windows.Forms.dll', '/reference:System.Drawing.dll',
                     '/reference:System.Web.Extensions.dll',
-                    *[str(ROOT / 'launcher' / name) for name in ('Program.cs', 'SetupWindow.cs', 'ProcessJob.cs')],
+                    '/reference:System.IO.Compression.dll', '/reference:System.IO.Compression.FileSystem.dll',
+                    *[str(ROOT / 'launcher' / name) for name in ('Program.cs', 'SetupWindow.cs', 'ProcessJob.cs', 'RuntimeBootstrap.cs')],
                     str(ROOT / 'tests/ReleaseLayoutSmoke.cs')], check=True, capture_output=True)
     subprocess.run([str(output), str(tmp_path / "日本語 [portable] Queen's app")], check=True, timeout=20)
 
@@ -49,7 +50,8 @@ def test_built_zip_extracted_backend_with_clean_path(tmp_path):
         assert 'Easy Japanese Subtitles.exe' in names
         assert 'Read me.txt' not in names
         assert '_internal/app/ui/index.html' in names
-        assert '_internal/scripts/runtime-profiles.ps1' in names
+        assert '_internal/scripts/setup-runtime.py' in names
+        assert not any(name.endswith('.ps1') for name in names)
         assert '_internal/constraints-windows-py312.txt' in names
         assert all(name.startswith('_internal/') or name == 'Easy Japanese Subtitles.exe' for name in names)
         assert not any(part in {'.runtime', '.app-data', '.git', 'tests', '__pycache__', '.venv'}

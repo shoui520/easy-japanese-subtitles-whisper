@@ -5,9 +5,10 @@ using System.Windows.Forms;
 internal static class SetupWindowSmoke {
     [STAThread]
     private static int Main(string[] args) {
-        bool fail=args[1]=="fail", sawFailure=false, timedOut=false, sawProgress=false, sawInstall=false;
+        bool fail=args[1]=="fail", sawFailure=false, timedOut=false, sawProgress=false, sawInstall=false, sawLive=false;
         Application.EnableVisualStyles();
         using(var window=new SetupWindow(args[0])) {
+            window.PrepareRuntime=(profile,report,token)=>System.Threading.Tasks.Task.FromResult(args[3]);
             var compute=(ComboBox)typeof(SetupWindow).GetField("compute",BindingFlags.NonPublic|BindingFlags.Instance).GetValue(window);
             if(compute.Items.Count!=4)return 7;
             if(args.Length>2)compute.SelectedIndex=Array.IndexOf(SetupWindow.Profiles,args[2]);
@@ -22,6 +23,8 @@ internal static class SetupWindowSmoke {
                 var progress=(ProgressBar)typeof(SetupWindow).GetField("progress",BindingFlags.NonPublic|BindingFlags.Instance).GetValue(window);
                 if(progress.Value==50)sawProgress=true;
                 var detail=(Label)typeof(SetupWindow).GetField("detail",BindingFlags.NonPublic|BindingFlags.Instance).GetValue(window);
+                var live=(TextBox)typeof(SetupWindow).GetField("liveLog",BindingFlags.NonPublic|BindingFlags.Instance).GetValue(window);
+                if(live.ReadOnly && live.Text.Contains("Installing application components"))sawLive=true;
                 if(progress.Value==25 && progress.Style==ProgressBarStyle.Continuous &&
                     stage.Text=="Installing application components" && detail.Text.Contains("1 of 4 packages installed") &&
                     detail.Text.Contains("Installing numpy"))sawInstall=true;
@@ -38,6 +41,7 @@ internal static class SetupWindowSmoke {
             if(timedOut)return 2;
             if(!sawProgress)return 5;
             if(!sawInstall)return 6;
+            if(!sawLive)return 8;
             if(fail)return sawFailure?0:3;
             return window.DialogResult==DialogResult.OK?0:4;
         }

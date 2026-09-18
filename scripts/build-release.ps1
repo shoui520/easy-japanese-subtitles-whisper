@@ -25,9 +25,8 @@ Get-ChildItem -LiteralPath $appRoot -Recurse -File | Where-Object {
     Copy-Item -LiteralPath $_.FullName -Destination $target
 }
 New-Item -ItemType Directory -Path (Join-Path $internal 'scripts') -Force | Out-Null
-Copy-Item -LiteralPath (Join-Path $project 'scripts/setup-private-runtime.ps1') -Destination (Join-Path $internal 'scripts')
+Copy-Item -LiteralPath (Join-Path $project 'scripts/setup-runtime.py') -Destination (Join-Path $internal 'scripts')
 Copy-Item -LiteralPath (Join-Path $project 'scripts/install-progress.py') -Destination (Join-Path $internal 'scripts')
-Copy-Item -LiteralPath (Join-Path $project 'scripts/runtime-profiles.ps1') -Destination (Join-Path $internal 'scripts')
 & (Join-Path $PSScriptRoot 'build-launcher.ps1') -OutputDirectory $stage -PortableRelease
 & (Join-Path $PSScriptRoot 'test-release-security.ps1') -Path $stage
 Add-Type -AssemblyName System.IO.Compression.FileSystem

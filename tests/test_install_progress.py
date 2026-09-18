@@ -85,9 +85,16 @@ def test_real_pip_download_emits_live_progress_and_preserves_failure(tmp_path):
         thread.join()
 
 
-def test_install_progress_counts_only_successes_and_reports_elapsed(capsys):
+def test_install_progress_counts_only_successes_and_reports_elapsed(capsys, monkeypatch):
+    heartbeat_seen = threading.Event()
+    original_report = module.report
+    def observe(stage, detail, progress=None):
+        original_report(stage, detail, progress)
+        if 'elapsed' in detail and '0m 00s elapsed' not in detail:
+            heartbeat_seen.set()
+    monkeypatch.setattr(module, 'report', observe)
     def slow_install():
-        time.sleep(1.1)
+        assert heartbeat_seen.wait(5)
     def failed_install():
         raise RuntimeError('disk full')
     requirements = [SimpleNamespace(name='first', install=slow_install),
@@ -98,7 +105,7 @@ def test_install_progress_counts_only_successes_and_reports_elapsed(capsys):
     with pytest.raises(RuntimeError, match='disk full'):
         module.install_with_progress(install_all, requirements, 'components')
     result = events(capsys.readouterr().out)
-    assert any('01s elapsed' in event['detail'] for event in result)
+    assert heartbeat_seen.is_set()
     assert any('1 of 2 packages installed' in event['detail'] for event in result)
     assert result[-1]['progress'] == .5
     assert not any(event['progress'] == 1 for event in result)

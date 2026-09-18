@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Threading.Tasks;
+using System.Threading;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
@@ -14,6 +15,9 @@ internal sealed class SetupWindow : Form
     private readonly ProgressBar progress = new ProgressBar();
     private readonly Button retry = new Button(), cancel = new Button(), logButton = new Button();
     private readonly ComboBox compute = new ComboBox();
+    private readonly TextBox liveLog = new TextBox();
+    private CancellationTokenSource cancellation;
+    internal Func<string,Action<string>,CancellationToken,Task<string>> PrepareRuntime;
     private bool running, cancelled;
     private string setupError;
     internal static readonly string[] Profiles = {"cu128", "xpu", "rocm", "cpu"};
@@ -22,11 +26,12 @@ internal sealed class SetupWindow : Form
 
     public SetupWindow(string project) {
         root = project;
+        PrepareRuntime=(profile,report,token)=>RuntimeBootstrap.Prepare(root,profile,report,token);
         Directory.CreateDirectory(Path.Combine(root, ".app-data", "logs"));
         logPath = Path.Combine(root, ".app-data", "logs", "setup-" + DateTime.Now.ToString("yyyyMMdd-HHmmss-fff") + ".log");
         Text = "Setting up Easy Japanese Subtitles";
         Font = new Font("Meiryo", 10);
-        ClientSize = new Size(570, 330);
+        ClientSize = new Size(720, 560);
         BackColor = Color.FromArgb(244,245,240);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false; MinimizeBox = false;
@@ -57,15 +62,24 @@ internal sealed class SetupWindow : Form
         cancel.SetBounds(439,215,105,32); cancel.Text = "Close";
         logButton.SetBounds(24,265,150,32); logButton.Text = "View setup log";
         Controls.AddRange(new Control[]{stage,detail,progress,compute,retry,cancel,logButton});
+        liveLog.SetBounds(24,310,672,225); liveLog.Multiline=true; liveLog.ReadOnly=true;
+        liveLog.ScrollBars=ScrollBars.Both; liveLog.WordWrap=false;
+        liveLog.Font=new Font("Meiryo",9);
+        Controls.Add(liveLog);
         retry.Click += async (s,e) => await Install();
-        cancel.Click += (s,e) => { if (running) { cancelled=true; if(job!=null)job.Dispose(); } else Close(); };
+        cancel.Click += (s,e) => { if (running) { cancelled=true; if(cancellation!=null)cancellation.Cancel(); if(job!=null)job.Dispose(); } else Close(); };
         logButton.Click += (s,e) => { if(File.Exists(logPath)) Process.Start(new ProcessStartInfo(logPath){UseShellExecute=true}); };
-        FormClosing += (s,e) => { cancelled=true; if(job!=null)job.Dispose(); };
+        FormClosing += (s,e) => { cancelled=true; if(cancellation!=null)cancellation.Cancel(); if(job!=null)job.Dispose(); };
     }
 
     private void Report(string line) {
         if (line == null) return;
         lock(logLock) File.AppendAllText(logPath, line + Environment.NewLine);
+        if(!IsDisposed && IsHandleCreated) BeginInvoke((Action)(()=>{
+            if(IsDisposed)return;
+            if(liveLog.TextLength>120000)liveLog.Text=liveLog.Text.Substring(liveLog.TextLength-60000);
+            liveLog.AppendText(line+Environment.NewLine);
+        }));
         if (!line.StartsWith("SETUP ") || IsDisposed) return;
         try {
             var data = new JavaScriptSerializer().Deserialize<Dictionary<string,object>>(line.Substring(6));
@@ -86,17 +100,24 @@ internal sealed class SetupWindow : Form
     private async Task Install() {
         if (running) return;
         running=true; cancelled=false; setupError=null; retry.Enabled=false; compute.Enabled=false; cancel.Text="Cancel";
+        cancellation=new CancellationTokenSource();
         stage.Text="Preparing your app"; detail.Text="Checking and downloading required components";
         progress.Style=ProgressBarStyle.Marquee;
         try {
-            string powershell=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-            string script=Path.Combine(root,"scripts","setup-private-runtime.ps1");
+            string python=await PrepareRuntime(Profiles[compute.SelectedIndex],Report,cancellation.Token);
+            cancellation.Token.ThrowIfCancellationRequested();
+            string script=Path.Combine(root,"scripts","setup-runtime.py");
+            Report("Starting Python setup: "+python+"\nScript: "+script);
             using(var process=new Process()) {
-                process.StartInfo=new ProcessStartInfo(powershell,"-NoProfile -ExecutionPolicy Bypass -File \""+script+"\" -Resume -WaitForStart -Compute "+Profiles[compute.SelectedIndex]) {
+                process.StartInfo=new ProcessStartInfo(python,"-u \""+script+"\" "+Profiles[compute.SelectedIndex]+" --wait-for-start") {
                     WorkingDirectory=root, UseShellExecute=false, CreateNoWindow=true,
-                    RedirectStandardInput=true, RedirectStandardOutput=true, RedirectStandardError=true
+                    RedirectStandardInput=true, RedirectStandardOutput=true, RedirectStandardError=true,
+                    StandardOutputEncoding=System.Text.Encoding.UTF8, StandardErrorEncoding=System.Text.Encoding.UTF8
                 };
-                process.StartInfo.EnvironmentVariables.Remove("PSModulePath");
+                process.StartInfo.EnvironmentVariables.Remove("PYTHONPATH");
+                process.StartInfo.EnvironmentVariables.Remove("PYTHONHOME");
+                process.StartInfo.EnvironmentVariables["PYTHONNOUSERSITE"]="1";
+                process.StartInfo.EnvironmentVariables["PYTHONUTF8"]="1";
                 process.OutputDataReceived+=(s,e)=>Report(e.Data);
                 process.ErrorDataReceived+=(s,e)=>Report(e.Data);
                 process.Start();
@@ -118,6 +139,7 @@ internal sealed class SetupWindow : Form
             }
         } finally {
             if(job!=null){job.Dispose();job=null;}
+            if(cancellation!=null){cancellation.Dispose();cancellation=null;}
             running=false;
             if(!IsDisposed){retry.Text="Retry";retry.Enabled=true;compute.Enabled=true;cancel.Text="Close";}
         }

@@ -79,7 +79,7 @@ function Fetch-Verified($Url, $Destination, $Sha256) {
                 $received += $count
                 if ($timer.ElapsedMilliseconds -ge 300) {
                     $fraction = $null
-                    if ($response.ContentLength -gt 0) { $fraction = [Math]::Min(1, $received / $response.ContentLength) }
+                    if ($response.ContentLength -gt 0) { $fraction = [Math]::Min(1.0, [double]$received / $response.ContentLength) }
                     $speed = $received / [Math]::Max(0.001, $elapsed.Elapsed.TotalSeconds)
                     $detail = '{0:N1} MB downloaded | {1:N1} MB/s' -f ($received / 1MB), ($speed / 1MB)
                     if ($response.ContentLength -gt 0) {
