@@ -29,8 +29,10 @@ Copy-Item -LiteralPath (Join-Path $project 'scripts/setup-private-runtime.ps1') 
 Copy-Item -LiteralPath (Join-Path $project 'scripts/install-progress.py') -Destination (Join-Path $internal 'scripts')
 Copy-Item -LiteralPath (Join-Path $project 'scripts/runtime-profiles.ps1') -Destination (Join-Path $internal 'scripts')
 & (Join-Path $PSScriptRoot 'build-launcher.ps1') -OutputDirectory $stage -PortableRelease
+& (Join-Path $PSScriptRoot 'test-release-security.ps1') -Path $stage
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [IO.Compression.ZipFile]::CreateFromDirectory($stage, $zip)
+& (Join-Path $PSScriptRoot 'test-release-security.ps1') -Path $zip
 $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 "$hash  $name.zip" | Set-Content -LiteralPath "$zip.sha256" -Encoding ASCII
 Write-Host "Release archive: $zip"
