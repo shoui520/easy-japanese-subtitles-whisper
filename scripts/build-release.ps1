@@ -12,7 +12,7 @@ if ((Test-Path -LiteralPath $stage) -or (Test-Path -LiteralPath $zip)) {
 $internal = Join-Path $stage '_internal'
 New-Item -ItemType Directory -Path $internal -Force | Out-Null
 # Explicit allowlist: never copy environments, credentials, caches, logs or user media.
-foreach ($file in @('anime_subs.py','requirements.txt','constraints-windows-py314.txt','constraints-windows-py312.txt')) {
+foreach ($file in @('LICENSE','anime_subs.py','requirements.txt','constraints-windows-py314.txt','constraints-windows-py312.txt')) {
     Copy-Item -LiteralPath (Join-Path $project $file) -Destination $internal
 }
 $appRoot = Join-Path $project 'app'
