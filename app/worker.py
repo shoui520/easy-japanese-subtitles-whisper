@@ -31,7 +31,9 @@ def process(request):
     emit("Reading subtitle timings", detail="Finding dialogue in the selected subtitle track" if request.get("subtitle_index") is not None else "Using the model's own timestamps")
     regions = None
     if request.get("subtitle_index") is not None:
-        regions = subtitle_regions(source, request["subtitle_index"], ffmpeg)
+        regions = subtitle_regions(source, request["subtitle_index"], ffmpeg,
+                                   codec=request.get("subtitle_codec"), ffprobe=request.get("ffprobe"),
+                                   duration=request.get("duration"))
         if not regions:
             raise RuntimeError("The selected subtitle track has no usable timings. Choose another track or model timestamps.")
     emit("Extracting Japanese audio", 0, detail="Reading the selected audio track; your video is unchanged")

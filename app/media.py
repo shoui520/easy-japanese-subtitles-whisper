@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import subprocess
 from pathlib import Path
 
 TEXT_SUBS = {"ass", "ssa", "subrip", "webvtt", "mov_text", "text"}
+TIMING_SUBS = TEXT_SUBS | {"hdmv_pgs_subtitle"}
 VIDEO_EXTENSIONS = frozenset({
     ".mkv", ".mp4", ".avi", ".mov", ".m4v", ".webm", ".wmv", ".asf",
     ".mpg", ".mpeg", ".ts", ".m2ts", ".mts", ".vob", ".flv", ".ogv",
@@ -71,7 +73,7 @@ def is_partial(track):
 
 
 def choose_subtitles(tracks):
-    candidates = [t for t in tracks if t["codec"] in TEXT_SUBS and not is_partial(t)]
+    candidates = [t for t in tracks if t["codec"] in TIMING_SUBS and not is_partial(t)]
     english = [t for t in candidates if language(t) in {"en", "eng"} or "english" in t["title"].lower()]
     candidates = english or candidates
     full = [t for t in candidates if re.search(r"\bfull\b|dialogue", t["title"], re.I)]
@@ -93,7 +95,7 @@ def inspect(path: Path, ffprobe: str):
         (audio if s["codec_type"] == "audio" else subtitles).append(track)
     selected = choose_subtitles(subtitles)
     # Absence of a usable full track is not permission to use a signs track.
-    ambiguous = selected is None and any(t["codec"] in TEXT_SUBS and not is_partial(t) for t in subtitles)
+    ambiguous = selected is None and any(t["codec"] in TIMING_SUBS and not is_partial(t) for t in subtitles)
     return dict(audio=audio, subtitles=subtitles, audio_index=choose_audio(audio),
                 subtitle_index=selected, needs_subtitle_choice=ambiguous,
                 duration=float(data.get("format", {}).get("duration", 0)),
@@ -102,11 +104,58 @@ def inspect(path: Path, ffprobe: str):
                              "No usable full subtitles; using model timestamps"))
 
 
-def subtitle_regions(source, index, ffmpeg):
-    """Extract text subtitles to memory; neither source nor sidecars are written."""
+def subtitle_regions(source, index, ffmpeg, *, codec=None, ffprobe=None, duration=None):
+    """Read timing guides without writing subtitles or changing the source."""
+    if codec == "hdmv_pgs_subtitle":
+        if not ffprobe:
+            raise RuntimeError("The subtitle timing reader is unavailable. Run setup again.")
+        data = json.loads(run([ffprobe, "-v", "error", "-select_streams", str(index),
+                               "-show_frames", "-of", "json", str(source)]))
+        return regions_from_pgs(data.get("frames", []), duration)
     text = run([ffmpeg, "-nostdin", "-v", "error", "-copyts", "-i", str(source),
                 "-map", f"0:{index}", "-f", "srt", "-"])
     return regions_from_srt(text)
+
+
+def regions_from_pgs(frames, duration=None, max_seconds=25.0, max_gap=2.0):
+    """Decoded PGS display states: each replacement/clear closes the prior state.
+
+    PTS is already on the container timeline; do not add stream start_time.
+    UINT32_MAX means 'until replaced', not a 49-day subtitle duration.
+    Animation updates are unioned before chunking, not transcribed separately.
+    """
+    events = []
+    for frame in frames:
+        if frame.get("media_type") != "subtitle":
+            continue
+        try:
+            pts = float(frame["pts_time"])
+            start = pts + int(frame.get("start_display_time", 0)) / 1000
+            end_ms = int(frame.get("end_display_time", 4294967295))
+            end = pts + end_ms / 1000 if end_ms != 4294967295 else None
+            visible = int(frame["num_rects"]) > 0
+            if not math.isfinite(start) or (end is not None and not math.isfinite(end)):
+                raise ValueError("Non-finite subtitle timestamp")
+        except (KeyError, TypeError, ValueError, OverflowError) as exc:
+            raise RuntimeError("This PGS track has invalid timings. Choose another track or model timestamps.") from exc
+        events.append((start, end, visible))
+    events.sort(key=lambda event: event[0])
+    cues = []
+    limit = float(duration) if duration is not None else None
+    if limit is not None and (not math.isfinite(limit) or limit <= 0):
+        limit = None
+    for i, (start, explicit_end, visible) in enumerate(events):
+        if not visible:
+            continue
+        next_start = events[i+1][0] if i+1 < len(events) else limit
+        ends = [end for end in (explicit_end, next_start, limit) if end is not None]
+        if not ends:
+            raise RuntimeError("The last PGS subtitle has no end timing. Choose another track or model timestamps.")
+        end = min(ends)
+        start = max(0, start)
+        if end > start:
+            cues.append((start, end))
+    return group_regions(cues, max_seconds, max_gap)
 
 
 def regions_from_srt(text, max_seconds=25.0, max_gap=2.0):
@@ -118,6 +167,10 @@ def regions_from_srt(text, max_seconds=25.0, max_gap=2.0):
         a, b = seconds(match.groups()[:4]), seconds(match.groups()[4:])
         if b > a:
             cues.append((a, b))
+    return group_regions(cues, max_seconds, max_gap)
+
+
+def group_regions(cues, max_seconds=25.0, max_gap=2.0):
     # First union overlaps so padding/chunk boundaries cannot duplicate audio.
     merged = []
     for a, b in sorted(cues):

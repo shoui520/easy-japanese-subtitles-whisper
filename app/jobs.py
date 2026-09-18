@@ -243,6 +243,9 @@ class Queue:
         log_path = self.data / "logs" / f"{item['id']}.log"
         with job_directory(self.data / "jobs") as job_dir:
             request = dict(source=item["source"], audio_index=item["audio_index"], subtitle_index=item.get("subtitle_index"),
+                           subtitle_codec=next((t['codec'] for t in item.get('subtitles', [])
+                                                if t['index'] == item.get('subtitle_index')), None),
+                           ffprobe=executable("ffprobe", settings["ffprobe"]),
                            model=model, device=settings["device"], duration=item.get("duration", 0),
                            ffmpeg=executable("ffmpeg", settings["ffmpeg"]), job_dir=str(job_dir))
             request_path = job_dir / "request.json"
